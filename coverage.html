@@ -104,18 +104,31 @@ table.summary-table thead td{font-weight:700;background:#f2f4f8;color:var(--ink-
 
 <h1>보장분석표</h1>
 <div class="sub">원본 엑셀처럼 아래 탭에서 시트를 골라 볼 수 있습니다: 보장분석표(전) / 보장분석표(후) / 종합비교 / 보장차이 / 마스터.</div>
-   <div class="card" id="featureGuideBox" style="margin-bottom:22px;display:none;">
-  <p class="desc" style="margin:0;" id="featureGuideText"></p>
+<button type="button" class="secondary" id="featureGuideBtn" style="margin-bottom:16px;">❓ 사용설명 보기</button>
+<div id="featureGuideModalOverlay" class="modal-overlay" style="display:none;">
+  <div class="modal-card" style="max-width:480px;">
+    <div class="modal-header">
+      <h2>사용설명</h2>
+      <button type="button" class="modal-close" id="featureGuideModalClose">&times;</button>
+    </div>
+    <div class="modal-body" id="featureGuideModalBody" style="white-space:pre-wrap;">불러오는 중...</div>
+  </div>
 </div>
 <script>
-  (async function(){
-    if(typeof getFeatureGuide !== 'function') return;
+  document.getElementById('featureGuideBtn').addEventListener('click', async function(){
+    document.getElementById('featureGuideModalOverlay').style.display = 'flex';
+    const body = document.getElementById('featureGuideModalBody');
+    body.textContent = '불러오는 중...';
+    if(typeof getFeatureGuide !== 'function'){ body.textContent = '사용설명 기능을 불러올 수 없습니다.'; return; }
     const text = await getFeatureGuide('coverage');
-    if(text && text.trim()){
-      document.getElementById('featureGuideText').textContent = text;
-      document.getElementById('featureGuideBox').style.display = 'block';
-    }
-  })();
+    body.textContent = (text && text.trim()) ? text : '등록된 사용설명이 없습니다.';
+  });
+  document.getElementById('featureGuideModalClose').addEventListener('click', function(){
+    document.getElementById('featureGuideModalOverlay').style.display = 'none';
+  });
+  document.getElementById('featureGuideModalOverlay').addEventListener('click', function(e){
+    if(e.target === this) this.style.display = 'none';
+  });
 </script>
 
 <div class="sheettabs">
