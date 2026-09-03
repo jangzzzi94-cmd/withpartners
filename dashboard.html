@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>대시보드 | With Partner</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#13233F; --navy-light:#1D3358; --gold:#B08D57;
+    --paper:#FAF8F3; --ink:#1B1F27; --ink-soft:#5B6270; --line:#E4DFD3;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Pretendard',sans-serif;color:var(--ink);background:var(--paper);}
+  header{background:var(--navy);color:#F2EFE6;padding:22px 48px;display:flex;justify-content:space-between;align-items:center;}
+  .wordmark{font-family:'Noto Serif KR',serif;font-size:19px;font-weight:700;}
+  .wordmark span{color:var(--gold);}
+  .logout{background:none;border:1px solid rgba(242,239,230,0.4);color:#F2EFE6;padding:8px 16px;
+    border-radius:2px;font-size:13px;cursor:pointer;font-family:'Pretendard',sans-serif;}
+  main{max-width:900px;margin:0 auto;padding:56px 24px;}
+  .greeting{font-family:'Noto Serif KR',serif;font-size:24px;font-weight:700;margin:0 0 6px 0;}
+  .email{color:var(--ink-soft);font-size:14px;margin:0 0 32px 0;}
+  .status-card{
+    border:1px solid var(--line);background:#fff;border-radius:2px;padding:26px 30px;
+    display:flex;justify-content:space-between;align-items:center;margin-bottom:36px;
+  }
+  .status-label{font-size:13px;color:var(--ink-soft);margin-bottom:6px;}
+  .status-value{font-family:'Noto Serif KR',serif;font-size:20px;font-weight:700;color:var(--navy);}
+  .charge-btn{padding:10px 20px;background:var(--gold);color:#fff;border-radius:2px;
+    font-size:13.5px;font-weight:600;text-decoration:none;}
+  .tools{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;}
+  @media (max-width:800px){.tools{grid-template-columns:1fr;}}
+  .tool-card{border:1px solid var(--line);background:#fff;padding:22px;border-radius:2px;cursor:pointer;}
+  .tool-card h3{font-family:'Noto Serif KR',serif;font-size:16px;margin:0 0 8px 0;}
+  .tool-card p{font-size:13.5px;color:var(--ink-soft);margin:0 0 14px 0;line-height:1.5;}
+  .tool-cost{display:inline-block;font-size:12px;font-weight:700;color:var(--gold);
+    background:#F2ECDD;padding:3px 10px;border-radius:12px;}
+</style>
+</head>
+<body>
+<header>
+  <div class="wordmark">With<span>·</span>Partner</div>
+  <button class="logout" onclick="handleLogout()">로그아웃</button>
+</header>
+
+<main>
+  <h1 class="greeting" id="greeting">불러오는 중…</h1>
+  <p class="email" id="userEmail"></p>
+
+  <div class="status-card">
+    <div>
+      <div class="status-label">보유 크레딧</div>
+      <div class="status-value" id="pointsValue">확인 중</div>
+    </div>
+    <a class="charge-btn" href="charge.html">크레딧 충전</a>
+  </div>
+
+  <div class="tools">
+    <div class="tool-card" id="historyCard">
+      <h3>병력정리</h3>
+      <p>HIRA 데이터를 기반으로 고지의무 관련 병력을 정리합니다.</p>
+      <span class="tool-cost" id="historyCost">1회 1크레딧</span>
+    </div>
+    <div class="tool-card" id="coverageCard">
+      <h3>보장분석표</h3>
+      <p>보장분석표 엑셀을 업로드해 통합 리포트를 생성합니다.</p>
+      <span class="tool-cost" id="coverageCost">1회 3크레딧</span>
+    </div>
+    <div class="tool-card" id="familyCard">
+      <h3>가족보장분석</h3>
+      <p>가족 구성원별 보장분석표를 하나로 통합해 비교합니다.</p>
+      <span class="tool-cost" id="familyCost">1회 1크레딧</span>
+    </div>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-client.js"></script>
+<script>
+  async function init(){
+    const session = await requireLogin();
+    if(!session) return;
+
+    document.getElementById('greeting').textContent = '안녕하세요';
+    document.getElementById('userEmail').textContent = session.user.email;
+
+    const profile = await getMyProfile();
+    const costs = await getPointCosts();
+
+    const points = profile ? (profile.points || 0) : 0;
+    document.getElementById('pointsValue').textContent = points.toLocaleString() + ' 크레딧';
+
+    document.getElementById('historyCost').textContent = '1회 ' + costs.history + '크레딧';
+    document.getElementById('coverageCost').textContent = '1회 ' + costs.coverage + '크레딧';
+    document.getElementById('familyCost').textContent = '1회 ' + costs.family_coverage + '크레딧';
+
+    wireCard('historyCard', 'history.html', costs.history, points);
+    wireCard('coverageCard', 'coverage.html', costs.coverage, points);
+    wireCard('familyCard', 'family-coverage.html', costs.family_coverage, points);
+  }
+
+  function wireCard(cardId, targetUrl, cost, currentPoints){
+    document.getElementById(cardId).addEventListener('click', function(){
+      if(currentPoints < cost){
+        const go = confirm('크레딧이 부족합니다. (필요: ' + cost + '크레딧 / 보유: ' + currentPoints + '크레딧)\n충전 페이지로 이동할까요?');
+        if(go) window.location.href = 'charge.html';
+        return;
+      }
+      window.location.href = targetUrl;
+    });
+  }
+
+  async function handleLogout(){
+    await logout();
+  }
+
+  init();
+</script>
+</body>
+</html>

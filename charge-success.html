@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>결제 처리중 | With Partner</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --navy:#13233F; --gold:#B08D57; --paper:#FAF8F3; --ink:#1B1F27; --ink-soft:#5B6270; }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Pretendard',sans-serif;color:var(--ink);background:var(--paper);
+    min-height:100vh;display:flex;align-items:center;justify-content:center;}
+  .box{text-align:center;max-width:360px;padding:24px;}
+  h1{font-family:'Noto Serif KR',serif;font-size:20px;margin:0 0 10px 0;}
+  p{color:var(--ink-soft);font-size:14px;line-height:1.6;}
+  .btn{display:inline-block;margin-top:20px;padding:12px 24px;background:var(--navy);
+    color:#F2EFE6;text-decoration:none;border-radius:2px;font-size:14px;font-weight:600;}
+</style>
+</head>
+<body>
+<div class="box">
+  <h1 id="title">결제를 확인하고 있습니다…</h1>
+  <p id="desc">잠시만 기다려주세요.</p>
+  <a class="btn" id="goBtn" href="dashboard.html" style="display:none;">대시보드로 이동</a>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-client.js"></script>
+<script>
+  // ⚠️ Edge Function 배포 후, 실제 함수 URL로 교체하세요. (SUPABASE_URL은 위 supabase-client.js와 동일해야 함)
+  const CONFIRM_FUNCTION_URL = SUPABASE_URL + "/functions/v1/charge-points";
+
+  async function confirmPayment(){
+    const params = new URLSearchParams(window.location.search);
+    const paymentKey = params.get("paymentKey");
+    const orderId = params.get("orderId");
+    const amount = params.get("amount");
+
+    const session = await requireLogin();
+    if(!session) return;
+
+    try{
+      const res = await fetch(CONFIRM_FUNCTION_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + session.access_token,
+        },
+        body: JSON.stringify({ paymentKey, orderId, amount }),
+      });
+      const result = await res.json();
+
+      if(res.ok && result.success){
+        document.getElementById("title").textContent = "충전이 완료되었습니다";
+        document.getElementById("desc").textContent = result.points.toLocaleString() + "크레딧이 지급되었습니다. (현재 잔액: " + result.newBalance.toLocaleString() + "크레딧)";
+      } else {
+        document.getElementById("title").textContent = "결제 확인에 실패했습니다";
+        document.getElementById("desc").textContent = result.message || "잠시 후 다시 시도해주세요.";
+      }
+    } catch(e){
+      document.getElementById("title").textContent = "결제 확인 중 오류가 발생했습니다";
+      document.getElementById("desc").textContent = "문제가 계속되면 문의해주세요.";
+    }
+    document.getElementById("goBtn").style.display = "inline-block";
+  }
+
+  confirmPayment();
+</script>
+</body>
+</html>

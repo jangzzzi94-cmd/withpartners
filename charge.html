@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>크레딧 충전 | With Partner</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#13233F; --navy-light:#1D3358; --gold:#B08D57;
+    --paper:#FAF8F3; --ink:#1B1F27; --ink-soft:#5B6270; --line:#E4DFD3;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Pretendard',sans-serif;color:var(--ink);background:var(--paper);}
+  header{background:var(--navy);color:#F2EFE6;padding:22px 48px;display:flex;justify-content:space-between;align-items:center;}
+  .wordmark{font-family:'Noto Serif KR',serif;font-size:19px;font-weight:700;}
+  .wordmark span{color:var(--gold);}
+  .back{color:#F2EFE6;text-decoration:none;font-size:13px;opacity:0.8;}
+  main{max-width:680px;margin:0 auto;padding:56px 24px;}
+  h1{font-family:'Noto Serif KR',serif;font-size:24px;font-weight:700;margin:0 0 8px 0;}
+  .sub{color:var(--ink-soft);font-size:14px;margin:0 0 36px 0;}
+  .packages{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:32px;}
+  .pkg{border:1px solid var(--line);background:#fff;border-radius:2px;padding:22px;cursor:pointer;text-align:left;font-family:'Pretendard',sans-serif;}
+  .pkg.selected{border-color:var(--navy);box-shadow:0 0 0 1px var(--navy);}
+  .pkg-credits{font-family:'Noto Serif KR',serif;font-size:19px;font-weight:700;color:var(--navy);}
+  .pkg-price{font-size:14px;color:var(--ink-soft);margin-top:6px;}
+  .pkg-bonus{display:inline-block;margin-top:8px;font-size:12px;font-weight:600;color:var(--gold);background:#F2ECDD;padding:3px 8px;border-radius:12px;}
+  .pay-btn{width:100%;padding:15px;background:var(--navy);color:#F2EFE6;border:none;border-radius:2px;font-size:15.5px;font-weight:600;cursor:pointer;font-family:'Pretendard',sans-serif;}
+  .pay-btn:disabled{opacity:0.4;cursor:not-allowed;}
+  .msg{margin-top:16px;font-size:13.5px;padding:12px 14px;border-radius:2px;display:none;}
+  .msg.show{display:block;background:#F7EAE6;color:#B3402A;border:1px solid #E9C6BB;}
+</style>
+</head>
+<body>
+<header>
+  <div class="wordmark">With<span>·</span>Partner</div>
+  <a class="back" href="dashboard.html">← 대시보드</a>
+</header>
+
+<main>
+  <h1>크레딧 충전</h1>
+  <p class="sub">충전한 크레딧으로 병력정리(1크레딧), 보장분석표(3크레딧), 가족보장분석(1크레딧)을 이용할 수 있습니다. 크레딧은 With Partner 서비스 내에서만 사용 가능하며 현금화·양도는 불가합니다.</p>
+
+  <div class="packages" id="packages"></div>
+
+  <button class="pay-btn" id="payBtn" disabled>결제하기</button>
+  <div class="msg" id="errMsg"></div>
+</main>
+
+<script src="https://js.tosspayments.com/v1/payment"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-client.js"></script>
+<script>
+  // ⚠️ 토스페이먼츠 개발자센터에서 발급받은 클라이언트 키로 교체하세요 (test_ck_... 또는 live_ck_...)
+  const TOSS_CLIENT_KEY = "YOUR_TOSS_CLIENT_KEY";
+  const tossPayments = TossPayments(TOSS_CLIENT_KEY);
+
+  // 크레딧 패키지 — 1크레딧 ≈ 1,000원, 대용량 구매 시 10% 추가 지급
+  const PACKAGES = [
+    { credits: 5,  price: 5000,  bonus: null },
+    { credits: 10, price: 10000, bonus: null },
+    { credits: 33, price: 30000, bonus: "10% 추가 지급" },
+    { credits: 55, price: 50000, bonus: "10% 추가 지급" },
+  ];
+
+  let selected = null;
+  let currentUser = null;
+
+  function renderPackages(){
+    const wrap = document.getElementById("packages");
+    wrap.innerHTML = PACKAGES.map((p, i) => `
+      <button type="button" class="pkg" data-i="${i}" onclick="selectPackage(${i})">
+        <div class="pkg-credits">${p.credits.toLocaleString()} 크레딧</div>
+        <div class="pkg-price">${p.price.toLocaleString()}원</div>
+        ${p.bonus ? `<div class="pkg-bonus">${p.bonus}</div>` : ""}
+      </button>
+    `).join("");
+  }
+
+  function selectPackage(i){
+    selected = PACKAGES[i];
+    document.querySelectorAll(".pkg").forEach((el, idx) => {
+      el.classList.toggle("selected", idx === i);
+    });
+    document.getElementById("payBtn").disabled = false;
+  }
+
+  async function startPayment(){
+    if(!selected || !currentUser) return;
+    const errEl = document.getElementById("errMsg");
+    errEl.className = "msg";
+
+    const orderId = crypto.randomUUID();
+
+    const { error } = await supabaseClient.from("pending_orders").insert({
+      order_id: orderId,
+      user_id: currentUser.id,
+      points: selected.credits,
+      amount: selected.price,
+    });
+
+    if(error){
+      errEl.textContent = "주문 생성에 실패했습니다: " + error.message;
+      errEl.className = "msg show";
+      return;
+    }
+
+    tossPayments.requestPayment("카드", {
+      amount: selected.price,
+      orderId: orderId,
+      orderName: `크레딧 ${selected.credits.toLocaleString()} 충전`,
+      customerEmail: currentUser.email,
+      successUrl: window.location.origin + "/charge-success.html",
+      failUrl: window.location.origin + "/charge-fail.html",
+    });
+  }
+
+  document.getElementById("payBtn").addEventListener("click", startPayment);
+
+  (async ()=>{
+    const session = await requireLogin();
+    if(!session) return;
+    currentUser = session.user;
+    renderPackages();
+  })();
+</script>
+</body>
+</html>
