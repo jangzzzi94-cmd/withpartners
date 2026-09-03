@@ -70,6 +70,30 @@ async function adminListProfiles(){
   return data || [];
 }
 
+async function createCoverageJob(){
+  const { data, error } = await supabaseClient.rpc('create_coverage_job');
+  if(error){ console.error(error); return null; }
+  return data || null;
+}
+
+async function touchCoverageJob(jobId){
+  if(!jobId) return false;
+  const { data, error } = await supabaseClient.rpc('touch_coverage_job', { p_job_id: jobId });
+  if(error){ console.error(error); return false; }
+  return data === true;
+}
+
+async function getOwnCoverageJob(jobId){
+  if(!jobId) return null;
+  const { data, error } = await supabaseClient
+    .from('coverage_jobs')
+    .select('id')
+    .eq('id', jobId)
+    .maybeSingle();
+  if(error){ console.error(error); return null; }
+  return data;
+}
+
 async function requireAdmin(){
   const session = await requireLogin();
   if(!session) return null;
