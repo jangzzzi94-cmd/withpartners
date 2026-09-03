@@ -104,6 +104,19 @@ table.summary-table thead td{font-weight:700;background:#f2f4f8;color:var(--ink-
 
 <h1>보장분석표</h1>
 <div class="sub">원본 엑셀처럼 아래 탭에서 시트를 골라 볼 수 있습니다: 보장분석표(전) / 보장분석표(후) / 종합비교 / 보장차이 / 마스터.</div>
+   <div class="card" id="featureGuideBox" style="margin-bottom:22px;display:none;">
+  <p class="desc" style="margin:0;" id="featureGuideText"></p>
+</div>
+<script>
+  (async function(){
+    if(typeof getFeatureGuide !== 'function') return;
+    const text = await getFeatureGuide('coverage');
+    if(text && text.trim()){
+      document.getElementById('featureGuideText').textContent = text;
+      document.getElementById('featureGuideBox').style.display = 'block';
+    }
+  })();
+</script>
 
 <div class="sheettabs">
   <button class="sheettab active" data-sheet="before">보장분석표(전)</button>
