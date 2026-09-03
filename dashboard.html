@@ -4,200 +4,151 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>대시보드 | With Partner</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-  :root{
-    --navy:#13233F; --navy-light:#1D3358; --gold:#B08D57;
-    --paper:#FAF8F3; --ink:#1B1F27; --ink-soft:#5B6270; --line:#E4DFD3;
-  }
-  *{box-sizing:border-box;}
-  body{margin:0;font-family:'Pretendard',sans-serif;color:var(--ink);background:var(--paper);}
-  header{background:var(--navy);color:#F2EFE6;padding:22px 48px;display:flex;justify-content:space-between;align-items:center;}
-  .wordmark{font-family:'Noto Serif KR',serif;font-size:19px;font-weight:700;}
-  .wordmark span{color:var(--gold);}
-  nav a, nav button{color:#F2EFE6;text-decoration:none;font-size:13px;opacity:0.85;margin-left:18px;
-    background:none;border:none;cursor:pointer;font-family:inherit;}
-  .logout{background:none;border:1px solid rgba(242,239,230,0.4);color:#F2EFE6;padding:8px 16px;
-    border-radius:2px;font-size:13px;cursor:pointer;font-family:'Pretendard',sans-serif;}
-  main{max-width:900px;margin:0 auto;padding:56px 24px;}
-  .greeting{font-family:'Noto Serif KR',serif;font-size:24px;font-weight:700;margin:0 0 6px 0;}
-  .email{color:var(--ink-soft);font-size:14px;margin:0 0 32px 0;}
-  .status-card{
-    border:1px solid var(--line);background:#fff;border-radius:2px;padding:26px 30px;
-    display:flex;justify-content:space-between;align-items:center;margin-bottom:36px;
-  }
-  .status-label{font-size:13px;color:var(--ink-soft);margin-bottom:6px;}
-  .status-value{font-family:'Noto Serif KR',serif;font-size:20px;font-weight:700;color:var(--navy);}
-  .charge-btn{padding:10px 20px;background:var(--gold);color:#fff;border-radius:2px;
-    font-size:13.5px;font-weight:600;text-decoration:none;}
-  .tools{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;}
-  @media (max-width:800px){.tools{grid-template-columns:1fr;}}
-  .tool-card{border:1px solid var(--line);background:#fff;padding:22px;border-radius:2px;cursor:pointer;}
-  .tool-card h3{font-family:'Noto Serif KR',serif;font-size:16px;margin:0 0 8px 0;}
-  .tool-card p{font-size:13.5px;color:var(--ink-soft);margin:0 0 14px 0;line-height:1.5;}
-  .tool-cost{display:inline-block;font-size:12px;font-weight:700;color:var(--gold);
-    background:#F2ECDD;padding:3px 10px;border-radius:12px;}
-  .btn-ghost{background:none;border:1px solid var(--line);color:var(--ink-soft);
-    padding:9px 16px;border-radius:2px;font-size:13px;cursor:pointer;font-family:'Pretendard',sans-serif;}
-  .btn-ghost:hover{border-color:var(--navy);color:var(--navy);}
-  .footer-links{margin-top:48px;text-align:center;font-size:12.5px;color:var(--ink-soft);}
-  .footer-links a{color:var(--ink-soft);text-decoration:underline;cursor:pointer;}
-  .modal-overlay{position:fixed;inset:0;background:rgba(19,35,63,0.5);display:none;align-items:center;justify-content:center;z-index:50;padding:20px;}
-  .modal-card{background:#fff;border-radius:2px;max-width:520px;width:100%;max-height:80vh;overflow-y:auto;padding:0;}
-  .modal-header{display:flex;justify-content:space-between;align-items:center;padding:20px 24px;border-bottom:1px solid var(--line);}
-  .modal-header h2{font-family:'Noto Serif KR',serif;font-size:17px;margin:0;}
-  .modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:var(--ink-soft);}
-  .modal-body{padding:20px 24px;}
-  .rule-block{border-bottom:1px solid var(--line);padding:14px 0;}
-  .rule-block:last-child{border-bottom:none;}
-  .rule-block .t{font-weight:700;font-size:14px;margin-bottom:4px;}
-  .rule-block .c{font-size:13.5px;color:var(--ink-soft);white-space:pre-wrap;line-height:1.6;}
+.card-grid{grid-template-columns:1fr 1fr 1fr;}
+@media (max-width:900px){.card-grid{grid-template-columns:1fr 1fr;}}
+@media (max-width:640px){.card-grid{grid-template-columns:1fr;}}
 </style>
 </head>
 <body>
-<header>
-  <div class="wordmark">With<span>·</span>Partner</div>
-  <nav>
-    <a href="admin.html" id="adminLink" style="display:none;">관리자</a>
-    <button class="logout" onclick="handleLogout()">로그아웃</button>
-  </nav>
-</header>
-
-<main>
-  <h1 class="greeting" id="greeting">불러오는 중…</h1>
-  <p class="email" id="userEmail"></p>
-
-  <div class="status-card">
-    <div>
-      <div class="status-label">보유 크레딧</div>
-      <div class="status-value" id="pointsValue">확인 중</div>
-    </div>
-    <a class="charge-btn" href="charge.html">크레딧 충전</a>
-  </div>
-
-  <button type="button" class="btn-ghost" id="showRulesBtn" style="margin-bottom:20px;">📌 사용방법 보기</button>
-
-  <div class="tools">
-    <div class="tool-card" id="historyCard">
-      <h3>병력정리</h3>
-      <p>HIRA 데이터를 기반으로 고지의무 관련 병력을 정리합니다.</p>
-      <span class="tool-cost" id="historyCost">1회 1크레딧</span>
-    </div>
-    <div class="tool-card" id="coverageCard">
-      <h3>보장분석표</h3>
-      <p>보장분석표 엑셀을 업로드해 통합 리포트를 생성합니다.</p>
-      <span class="tool-cost" id="coverageCost">1회 3크레딧</span>
-    </div>
-    <div class="tool-card" id="familyCard">
-      <h3>가족보장분석</h3>
-      <p>가족 구성원별 보장분석표를 하나로 통합해 비교합니다.</p>
-      <span class="tool-cost" id="familyCost">1회 1크레딧</span>
-    </div>
-  </div>
-
-  <div class="footer-links">
-    <a id="deleteAccountLink">회원 탈퇴</a>
-  </div>
-</main>
-
-<div id="ruleModalOverlay" class="modal-overlay">
-  <div class="modal-card">
-    <div class="modal-header">
-      <h2>사용방법</h2>
-      <button type="button" class="modal-close" id="ruleModalClose">&times;</button>
-    </div>
-    <div class="modal-body" id="ruleModalBody">불러오는 중…</div>
-  </div>
+<div class="navbar">
+<a href="dashboard.html" class="brand">With <span>Partner</span></a>
+<nav><a href="admin.html" id="adminLink" style="display:none">관리자</a><a href="admin-limits.html" id="adminLimitsLink" style="display:none">당타사한도</a><a href="profile.html">프로필</a><a href="#" id="logoutLink">로그아웃</a></nav>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<div class="dash-wrap">
+<h1>안녕하세요<span id="userEmail"></span> 👋</h1>
+<p class="sub">이용하실 기능을 선택해주세요</p>
+<p class="sub" id="pointsLine" style="display:none"></p>
+
+<div style="display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap;">
+<button type="button" class="btn-ghost" id="showRulesBtn">📌 사용방법 보기</button>
+<a href="charge.html" class="btn-ghost" style="text-decoration:none;">💳 크레딧 충전</a>
+</div>
+
+<div class="card-grid">
+<a href="history.html" class="feature-card">
+<div class="icon">📋</div>
+<h3>병력정리</h3>
+<p>기본진료정보와 세부진료정보를 업로드해 자동으로 병력을 정리하고 고지사항 텍스트를 생성합니다.</p>
+<span class="badge-soon" id="historyBadge" style="display:none"></span>
+</a>
+<a href="coverage.html" class="feature-card">
+<div class="icon">📊</div>
+<h3>보장분석표</h3>
+<p>가입된 보장 내역을 업로드해 보장분석표(전)/(후)를 자동으로 만들고, 종합비교·보장차이까지 한 번에 확인합니다.</p>
+<span class="badge-soon" id="coverageBadge" style="display:none"></span>
+</a>
+<a href="family-coverage.html" class="feature-card">
+<div class="icon">👨‍👩‍👧‍👦</div>
+<h3>가족보장분석</h3>
+<p>가족 구성원별 보장분석표를 모아 하나의 통합 리포트로 비교하고, PDF로 저장합니다.</p>
+<span class="badge-soon" id="familyCoverageBadge" style="display:none"></span>
+</a>
+</div>
+</div>
+
+<div id="ruleModalOverlay" class="modal-overlay" style="display:none">
+<div class="modal-card" style="max-width:520px;">
+<div class="modal-header">
+<h2>사용방법</h2>
+<button type="button" class="modal-close" id="ruleModalClose" aria-label="닫기">&times;</button>
+</div>
+<div class="modal-body">
+<div id="ruleModalRows">불러오는 중...</div>
+</div>
+</div>
+</div>
+
 <script src="assets/supabase-client.js"></script>
 <script>
-  async function init(){
-    const session = await requireLogin();
-    if(!session) return;
+(async ()=>{
+  const session = await requireLogin();
+  if(!session) return;
+  document.getElementById('userEmail').textContent = ', ' + session.user.email;
+  const profile = await getMyProfile();
+  if(!profile) return;
 
-    document.getElementById('greeting').textContent = '안녕하세요';
-    document.getElementById('userEmail').textContent = session.user.email;
-
-    const profile = await getMyProfile();
-
-    if(profile && profile.suspended){
-      alert('이 계정은 정지되었습니다. 관리자에게 문의해주세요.');
-      await logout();
-      return;
-    }
-
-    if(profile && profile.role === 'admin'){
-      document.getElementById('adminLink').style.display = 'inline';
-    }
-
-    const costs = await getPointCosts();
-
-    const points = profile ? (profile.points || 0) : 0;
-    document.getElementById('pointsValue').textContent = points.toLocaleString() + ' 크레딧';
-
-    document.getElementById('historyCost').textContent = '1회 ' + costs.history + '크레딧';
-    document.getElementById('coverageCost').textContent = '1회 ' + costs.coverage + '크레딧';
-    document.getElementById('familyCost').textContent = '1회 ' + costs.family_coverage + '크레딧';
-
-    wireCard('historyCard', 'history.html', costs.history, points, profile);
-    wireCard('coverageCard', 'coverage.html', costs.coverage, points, profile);
-    wireCard('familyCard', 'family-coverage.html', costs.family_coverage, points, profile);
-  }
-
-  function wireCard(cardId, targetUrl, cost, currentPoints, profile){
-    document.getElementById(cardId).addEventListener('click', function(){
-      const isAdmin = profile && (profile.role === 'admin' || profile.role === 'gold');
-      if(!isAdmin && currentPoints < cost){
-        const go = confirm('크레딧이 부족합니다. (필요: ' + cost + '크레딧 / 보유: ' + currentPoints + '크레딧)\n충전 페이지로 이동할까요?');
-        if(go) window.location.href = 'charge.html';
-        return;
-      }
-      window.location.href = targetUrl;
-    });
-  }
-
-  async function handleLogout(){
+  if(profile.suspended){
+    alert('이 계정은 정지되었습니다. 관리자에게 문의해주세요.');
     await logout();
+    return;
   }
 
-  async function openRuleModal(){
-    document.getElementById('ruleModalOverlay').style.display = 'flex';
-    const body = document.getElementById('ruleModalBody');
-    body.textContent = '불러오는 중…';
-    const rules = await getSiteRules();
-    if(!rules.length){
-      body.textContent = '등록된 안내가 없습니다.';
-      return;
-    }
-    body.innerHTML = rules.map(r => `
-      <div class="rule-block">
-        <div class="t">${r.title}</div>
-        <div class="c">${(r.content||'').replace(/</g,'&lt;')}</div>
-      </div>
-    `).join('');
+  document.getElementById('userEmail').textContent = ', ' + (profile.nickname || session.user.email);
+
+  if(profile.role === 'admin'){
+    document.getElementById('adminLink').style.display = 'inline';
+    document.getElementById('adminLimitsLink').style.display = 'inline';
   }
-  function closeRuleModal(){
-    document.getElementById('ruleModalOverlay').style.display = 'none';
+
+  if(profile.role !== 'admin' && profile.role !== 'gold'){
+    const costs = await getPointCosts();
+    const pointsLine = document.getElementById('pointsLine');
+    pointsLine.textContent = '보유 크레딧: ' + (profile.points || 0) + ' 크레딧';
+    pointsLine.style.display = 'block';
+
+    document.getElementById('historyBadge').textContent = '1회 ' + costs.history + '크레딧';
+    document.getElementById('historyBadge').style.display = 'inline-block';
+    document.getElementById('coverageBadge').textContent = '1회 ' + costs.coverage + '크레딧';
+    document.getElementById('coverageBadge').style.display = 'inline-block';
+    document.getElementById('familyCoverageBadge').textContent = '1회 ' + costs.family_coverage + '크레딧';
+    document.getElementById('familyCoverageBadge').style.display = 'inline-block';
   }
-  document.getElementById('showRulesBtn').addEventListener('click', openRuleModal);
-  document.getElementById('ruleModalClose').addEventListener('click', closeRuleModal);
-  document.getElementById('ruleModalOverlay').addEventListener('click', function(e){
-    if(e.target === this) closeRuleModal();
+  // 크레딧이 부족해도 도구 페이지에는 들어갈 수 있습니다 (실제 실행 시에만 차감/확인).
+})();
+
+function renderRuleRows(rows){
+  const wrap = document.getElementById('ruleModalRows');
+  wrap.innerHTML = '';
+  if(!rows || rows.length === 0){
+    wrap.textContent = '등록된 안내가 없습니다.';
+    return;
+  }
+  rows.forEach(function(row){
+    const item = document.createElement('div');
+    item.className = 'modal-info-row';
+    item.style.flexDirection = 'column';
+    item.style.alignItems = 'flex-start';
+    item.style.gap = '4px';
+    const label = document.createElement('div');
+    label.className = 'modal-info-label';
+    label.textContent = row.title;
+    const value = document.createElement('div');
+    value.className = 'modal-info-value';
+    value.style.textAlign = 'left';
+    value.style.whiteSpace = 'pre-wrap';
+    value.style.color = 'var(--muted)';
+    value.style.fontSize = '13px';
+    value.textContent = row.content;
+    item.appendChild(label);
+    item.appendChild(value);
+    wrap.appendChild(item);
   });
+}
 
-  document.getElementById('deleteAccountLink').addEventListener('click', async ()=>{
-    if(!confirm('정말로 계정을 탈퇴하시겠습니까? 보유 크레딧을 포함한 모든 정보가 삭제되며 되돌릴 수 없습니다.')) return;
-    const result = await deleteMyAccount();
-    if(!result.ok){ alert('탈퇴 처리에 실패했습니다: ' + result.message); return; }
-    alert('탈퇴가 완료되었습니다.');
-    window.location.href = 'login.html';
-  });
+async function openRuleModal(){
+  document.getElementById('ruleModalOverlay').style.display = 'flex';
+  const wrap = document.getElementById('ruleModalRows');
+  wrap.textContent = '불러오는 중...';
+  const rows = await getSiteRules();
+  renderRuleRows(rows);
+}
+function closeRuleModal(){
+  document.getElementById('ruleModalOverlay').style.display = 'none';
+}
+document.getElementById('showRulesBtn').addEventListener('click', openRuleModal);
+document.getElementById('ruleModalClose').addEventListener('click', closeRuleModal);
+document.getElementById('ruleModalOverlay').addEventListener('click', function(e){
+  if(e.target === this) closeRuleModal();
+});
 
-  init();
+document.getElementById('logoutLink').addEventListener('click', async (e)=>{
+  e.preventDefault();
+  await logout();
+});
 </script>
 </body>
 </html>

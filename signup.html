@@ -63,6 +63,14 @@
       <h1>계정을 만드세요</h1>
       <p class="sub">가입 후 인증 이메일의 링크를 눌러 완료하세요.</p>
       <div class="field">
+        <label>이름</label>
+        <input type="text" id="name" placeholder="실명 입력">
+      </div>
+      <div class="field">
+        <label>생년월일</label>
+        <input type="date" id="birth">
+      </div>
+      <div class="field">
         <label>이메일</label>
         <input type="email" id="email" placeholder="name@example.com">
       </div>
@@ -87,8 +95,11 @@
   }
 
   document.getElementById('signupBtn').addEventListener('click', async ()=>{
+    const name = document.getElementById('name').value.trim();
+    const birth = document.getElementById('birth').value;
     const email = document.getElementById('email').value.trim();
     const password = document.getElementById('password').value;
+    if(!name || !birth){ showMsg('이름과 생년월일을 입력하세요.'); return; }
     if(!email || !password){ showMsg('이메일과 비밀번호를 입력하세요.'); return; }
     if(password.length < 8){ showMsg('비밀번호는 8자 이상이어야 합니다.'); return; }
 
@@ -96,7 +107,10 @@
     btn.disabled = true;
     const { error } = await supabaseClient.auth.signUp({
       email, password,
-      options: { emailRedirectTo: window.location.origin + '/dashboard.html' }
+      options: {
+        emailRedirectTo: window.location.origin + '/dashboard.html',
+        data: { name, birth }
+      }
     });
     btn.disabled = false;
 

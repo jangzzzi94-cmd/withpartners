@@ -71,7 +71,9 @@
       </div>
       <button class="btn" id="loginBtn">로그인</button>
       <div class="msg" id="msg"></div>
+      <div class="foot-link"><a href="reset-password.html">비밀번호를 잊으셨나요?</a></div>
       <div class="foot-link">계정이 없으신가요? <a href="signup.html">회원가입</a></div>
+      <p style="text-align:center;font-size:12px;color:var(--ink-soft);margin-top:24px;">초기 비밀번호: 111111</p>
     </div>
   </div>
 </div>
@@ -97,6 +99,13 @@
 
     if(error){ showMsg(error.message); return; }
     window.location.href = 'dashboard.html';
+  });
+
+  document.getElementById('email').addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter') document.getElementById('loginBtn').click();
+  });
+  document.getElementById('password').addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter') document.getElementById('loginBtn').click();
   });
 
   supabaseClient.auth.getSession().then(({data})=>{

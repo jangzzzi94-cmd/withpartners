@@ -69,6 +69,10 @@
   .style-card img{width:100%;height:110px;object-fit:cover;border-radius:2px;margin-bottom:8px;background:#F5F2EA;}
   .style-card .name{font-size:13px;font-weight:600;margin-bottom:6px;}
   .default-tag{display:inline-block;font-size:10.5px;font-weight:700;color:var(--gold);background:#F2ECDD;padding:2px 6px;border-radius:8px;margin-bottom:6px;}
+  .style-preview-picker{position:relative;display:inline-block;max-width:100%;border:1px solid var(--line);border-radius:2px;overflow:hidden;cursor:crosshair;margin-top:8px;}
+  .style-preview-picker img{display:block;max-width:100%;max-height:320px;height:auto;}
+  .style-preview-marker{position:absolute;width:14px;height:14px;background:#B08D57;border:2px solid #13233F;
+    border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;}
 </style>
 </head>
 <body>
@@ -88,6 +92,7 @@
   <div class="tabs">
     <button class="tab active" data-panel="p-members">회원관리</button>
     <button class="tab" data-panel="p-rules">이용방법</button>
+    <button class="tab" data-panel="p-guides">사용설명</button>
     <button class="tab" data-panel="p-costs">크레딧 단가</button>
     <button class="tab" data-panel="p-logs">포인트 로그</button>
     <button class="tab" data-panel="p-styles">표지 스타일</button>
@@ -121,6 +126,11 @@
     <div class="card" id="costsWrap"><div class="loading">불러오는 중…</div></div>
   </div>
 
+  <!-- ===== 사용설명 ===== -->
+  <div class="panel" id="p-guides">
+    <div class="card" id="guidesWrap"><div class="loading">불러오는 중…</div></div>
+  </div>
+
   <!-- ===== 포인트 로그 ===== -->
   <div class="panel" id="p-logs">
     <div id="logsWrap"><div class="loading">불러오는 중…</div></div>
@@ -134,13 +144,9 @@
         <input type="text" id="newStyleName" class="title-input" placeholder="스타일 이름">
         <input type="file" id="newStyleFile" accept="image/*">
       </div>
-      <div class="field-row">
-        <label style="font-size:12.5px;color:var(--ink-soft);">고객명 배지 X 위치(0~1)</label>
-        <input type="number" id="newStyleX" value="0.5" step="0.01" min="0" max="1" style="width:80px;">
-        <label style="font-size:12.5px;color:var(--ink-soft);">Y 위치(0~1)</label>
-        <input type="number" id="newStyleY" value="0.5" step="0.01" min="0" max="1" style="width:80px;">
-      </div>
-      <button class="btn-sm primary" onclick="handleAddStyle()">업로드</button>
+      <p class="sub" style="margin:8px 0;">이미지를 선택하면 미리보기가 뜹니다. 고객명이 표시될 위치를 이미지 위에서 클릭해 지정하세요.</p>
+      <div id="newStylePreviewWrap"></div>
+      <button class="btn-sm primary" style="margin-top:12px;" onclick="handleAddStyle()">업로드</button>
     </div>
     <div class="style-grid" id="stylesWrap"></div>
   </div>
@@ -178,12 +184,14 @@
     const wrap = document.getElementById("tableWrap");
     if(!list.length){ wrap.innerHTML = '<div class="loading">회원이 없습니다.</div>'; return; }
     let html = '<table><thead><tr>' +
-      '<th>이메일</th><th>닉네임</th><th>권한</th><th>보유 크레딧</th><th>가입일</th><th>상태</th><th>작업</th>' +
+      '<th>이메일</th><th>이름</th><th>생년월일</th><th>닉네임</th><th>권한</th><th>보유 크레딧</th><th>가입일</th><th>상태</th><th>작업</th>' +
       '</tr></thead><tbody>';
     list.forEach(p=>{
       const roleClass = p.role === 'admin' ? 'role-admin' : 'role-user';
       html += `<tr class="${p.suspended ? 'suspended' : ''}" data-id="${p.id}">
         <td>${p.email || ''}</td>
+        <td>${p.name || '-'}</td>
+        <td>${p.birth || '-'}</td>
         <td>${p.nickname || ''}</td>
         <td><span class="role-badge ${roleClass}">${p.role}</span></td>
         <td class="points-cell">${(p.points||0).toLocaleString()}</td>
@@ -314,6 +322,30 @@
     alert("저장되었습니다.");
   }
 
+  /* ---------------- 사용설명 ---------------- */
+  async function loadGuides(){
+    const wrap = document.getElementById("guidesWrap");
+    let html = "";
+    for(const feature of Object.keys(FEATURE_LABELS)){
+      const content = await getFeatureGuide(feature);
+      html += `
+        <div class="cost-row" style="align-items:flex-start;flex-direction:column;">
+          <div class="feature-label" style="width:auto;margin-bottom:6px;">${FEATURE_LABELS[feature]}</div>
+          <textarea id="guide-${feature}" style="width:100%;min-height:70px;padding:9px 12px;border:1px solid var(--line);border-radius:2px;font-family:inherit;font-size:13.5px;">${content}</textarea>
+          <button class="btn-sm primary" style="margin-top:8px;" onclick="handleSaveGuide('${feature}')">저장</button>
+        </div>
+      `;
+    }
+    wrap.innerHTML = html;
+  }
+
+  async function handleSaveGuide(feature){
+    const content = document.getElementById(`guide-${feature}`).value.trim();
+    const result = await adminSaveFeatureGuide(feature, content);
+    if(!result.ok){ alert("저장 실패: " + result.message); return; }
+    alert("저장되었습니다.");
+  }
+
   /* ---------------- 포인트 로그 ---------------- */
   async function loadLogs(){
     const logs = await getPointLogs(300);
@@ -345,6 +377,29 @@
   }
 
   /* ---------------- 표지 스타일 ---------------- */
+  let newStyleX = 0.5, newStyleY = 0.5;
+
+  document.getElementById('newStyleFile').addEventListener('change', (e)=>{
+    const file = e.target.files[0];
+    const wrap = document.getElementById('newStylePreviewWrap');
+    if(!file){ wrap.innerHTML = ''; return; }
+    const url = URL.createObjectURL(file);
+    newStyleX = 0.5; newStyleY = 0.5;
+    wrap.innerHTML = `
+      <div class="style-preview-picker" id="newStylePicker">
+        <img src="${url}" alt="미리보기">
+        <div class="style-preview-marker" id="newStyleMarker" style="left:50%;top:50%;"></div>
+      </div>
+    `;
+    document.getElementById('newStylePicker').addEventListener('click', (ev)=>{
+      const rect = ev.currentTarget.getBoundingClientRect();
+      newStyleX = (ev.clientX - rect.left) / rect.width;
+      newStyleY = (ev.clientY - rect.top) / rect.height;
+      document.getElementById('newStyleMarker').style.left = (newStyleX*100) + '%';
+      document.getElementById('newStyleMarker').style.top = (newStyleY*100) + '%';
+    });
+  });
+
   async function loadStyles(){
     const styles = await getCoverStyles();
     const wrap = document.getElementById("stylesWrap");
@@ -365,13 +420,12 @@
   async function handleAddStyle(){
     const name = document.getElementById("newStyleName").value.trim();
     const file = document.getElementById("newStyleFile").files[0];
-    const x = parseFloat(document.getElementById("newStyleX").value);
-    const y = parseFloat(document.getElementById("newStyleY").value);
     if(!name || !file){ alert("이름과 이미지를 모두 입력하세요."); return; }
-    const result = await createCoverStyle(name, file, x, y);
+    const result = await createCoverStyle(name, file, newStyleX, newStyleY);
     if(!result.ok){ alert("업로드 실패: " + result.message); return; }
     document.getElementById("newStyleName").value = "";
     document.getElementById("newStyleFile").value = "";
+    document.getElementById("newStylePreviewWrap").innerHTML = "";
     await loadStyles();
   }
 
@@ -397,6 +451,7 @@
     await loadMembers();
     await loadRules();
     await loadCosts();
+    await loadGuides();
     await loadStyles();
   })();
 
