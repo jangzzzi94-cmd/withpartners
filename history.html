@@ -109,6 +109,19 @@ button.secondary:hover{background:#e2eee2;}
   <h1>병력정리 자동 매칭</h1>
   <p class="sub">기본진료정보 + 세부진료정보 엑셀 업로드 → 매칭·정렬·하이라이트 → 병력정리 / 병력정리텍스트 자동 생성</p>
   <div class="privacy">업로드한 파일은 서버로 전송되지 않고 이 브라우저 안에서만 처리됩니다</div>
+  <div class="card" id="featureGuideBox" style="margin-bottom:22px;display:none;">
+  <p class="desc" style="margin:0;" id="featureGuideText"></p>
+</div>
+<script>
+  (async function(){
+    if(typeof getFeatureGuide !== 'function') return;
+    const text = await getFeatureGuide('history');
+    if(text && text.trim()){
+      document.getElementById('featureGuideText').textContent = text;
+      document.getElementById('featureGuideBox').style.display = 'block';
+    }
+  })();
+</script>
   <div class="pdf-card" style="margin-bottom:22px;">
     <p class="desc" style="margin:0;">📑 <strong>기본진료정보 / 세부진료정보</strong> 칸에 엑셀(.xlsx/.xlsm) 또는 PDF를 그대로 올리세요. PDF는 자동으로 표를 인식해 변환한 뒤 바로 매칭에 사용합니다. 여러 페이지짜리 PDF도 한 파일로 이어 붙여 처리합니다.</p>
   </div>
