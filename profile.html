@@ -57,11 +57,36 @@
   <div class="msg" id="pwMsg"></div>
 </div>
 
-<div class="auth-card" style="max-width:100%;padding:24px 22px;display:none;" id="coverSection">
-  <h3 style="margin:0 0 8px;font-size:15px;">보장분석표 표지 — 고객명 위치</h3>
-  <p class="sub" style="margin-bottom:14px;">이미지를 클릭한 위치에 고객명이 표시됩니다. 관리자가 설정한 기본 위치를 그대로 쓰려면 아무것도 안 하셔도 됩니다.</p>
-  <div id="coverPickerWrap"></div>
-  <div class="msg" id="coverMsg"></div>
+<div class="auth-card" style="max-width:100%;padding:24px 22px;" id="coverSection">
+  <h3 style="margin:0 0 8px;font-size:15px;">보장분석표 표지 스타일</h3>
+  <p class="sub" style="margin-bottom:14px;">아래에서 사용할 스타일을 고르거나, 내 표지 이미지를 직접 올려서 나만의 스타일을 만들 수 있습니다.</p>
+
+  <div id="allStylesWrap" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:24px;">불러오는 중...</div>
+
+  <div style="border-top:1px solid var(--line);padding-top:18px;">
+    <h4 id="myStyleEditorTitle" style="font-size:14px;margin:0 0 12px;">내 스타일 추가</h4>
+    <div class="field">
+      <label>스타일 이름</label>
+      <input type="text" id="myStyleNameInput" placeholder="예: 스타일1" maxlength="30">
+    </div>
+    <div class="field">
+      <label>이미지 파일 (A4 가로 방향 권장)</label>
+      <input type="file" id="myStyleFileInput" accept="image/*">
+    </div>
+    <div class="field">
+      <label>고객 이름 위치 &mdash; 미리보기 위에서 클릭하거나 배지를 드래그해 위치를 잡으세요</label>
+      <div id="myStylePreviewWrap" style="position:relative;width:100%;max-width:480px;aspect-ratio:297/210;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#eee;display:none;user-select:none;touch-action:none;">
+        <img id="myStylePreviewImg" src="" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:fill;pointer-events:none;">
+        <div id="myStyleBadge" style="position:absolute;background:#13233F;color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;cursor:move;border:2px solid #fff;box-sizing:border-box;">이름</div>
+      </div>
+      <div class="sub" id="myStylePreviewHint" style="margin-top:6px;">이미지를 선택하면 미리보기가 표시됩니다.</div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button type="button" class="btn-ghost" id="myStyleSaveBtn">추가</button>
+      <button type="button" class="btn-ghost" id="myStyleCancelBtn" style="display:none;">취소</button>
+    </div>
+    <div class="msg" id="myStyleMsg"></div>
+  </div>
 </div>
 
 <div class="danger-zone">
@@ -74,8 +99,6 @@
 <script src="assets/supabase-client.js"></script>
 <script>
   let myProfile = null;
-  let myStyle = null;
-  let pickedX = null, pickedY = null;
 
   function fmtDate(iso){
     if(!iso) return '-';
@@ -103,40 +126,164 @@
     document.getElementById('editName').value = myProfile.name || '';
     document.getElementById('editBirth').value = myProfile.birth || '';
 
-    myStyle = await getMyEffectiveCoverStyle(myProfile);
-    if(myStyle){
-      document.getElementById('coverSection').style.display = 'block';
-      renderCoverPicker();
-    }
+    await loadAllStyles();
   }
 
-  function renderCoverPicker(){
-    const wrap = document.getElementById('coverPickerWrap');
-    const x = (myProfile.cover_name_x != null) ? myProfile.cover_name_x : myStyle.name_x_ratio;
-    const y = (myProfile.cover_name_y != null) ? myProfile.cover_name_y : myStyle.name_y_ratio;
-    pickedX = x; pickedY = y;
-    wrap.innerHTML = `
-      <div class="cover-picker" id="coverPicker">
-        <img src="${getCoverImageUrl(myStyle.image_path)}" alt="${myStyle.name}">
-        <div class="cover-marker" id="coverMarker" style="left:${x*100}%;top:${y*100}%;"></div>
-      </div>
-      <div style="margin-top:12px;"><button type="button" class="btn-ghost" id="saveCoverPosBtn">이 위치로 저장</button></div>
-    `;
-    const picker = document.getElementById('coverPicker');
-    picker.addEventListener('click', (e)=>{
-      const rect = picker.getBoundingClientRect();
-      pickedX = (e.clientX - rect.left) / rect.width;
-      pickedY = (e.clientY - rect.top) / rect.height;
-      document.getElementById('coverMarker').style.left = (pickedX*100) + '%';
-      document.getElementById('coverMarker').style.top = (pickedY*100) + '%';
-    });
-    document.getElementById('saveCoverPosBtn').addEventListener('click', async ()=>{
-      const result = await updateMyCoverPosition(pickedX, pickedY);
-      const msg = document.getElementById('coverMsg');
-      if(!result.ok){ msg.textContent = '저장 실패: ' + result.message; msg.className='msg err show'; return; }
-      msg.textContent = '저장되었습니다.'; msg.className='msg ok show';
+  /* ============================ 표지 스타일: 선택 목록 ============================ */
+  async function loadAllStyles(){
+    const wrap = document.getElementById('allStylesWrap');
+    wrap.innerHTML = '불러오는 중...';
+    const [publicStyles, myStyles] = await Promise.all([getPublicCoverStyles(), getMyCoverStyles()]);
+    const all = [...publicStyles.map(s=>({...s, isMine:false})), ...myStyles.map(s=>({...s, isMine:true}))];
+    if(!all.length){ wrap.innerHTML = '<div class="sub">등록된 스타일이 없습니다.</div>'; return; }
+    wrap.innerHTML = '';
+    all.forEach(s=>{
+      const isActive = myProfile.cover_style_id === s.id || (!myProfile.cover_style_id && s.is_default);
+      const card = document.createElement('div');
+      card.style.cssText = 'border:1px solid ' + (isActive ? '#B08D57' : 'var(--line)') + ';border-radius:8px;overflow:hidden;background:#fff;' + (isActive ? 'box-shadow:0 0 0 1px #B08D57;' : '');
+      card.innerHTML = `
+        <div style="position:relative;width:100%;aspect-ratio:297/210;background:#eee;">
+          <img src="${getCoverImageUrl(s.image_path)}" style="width:100%;height:100%;object-fit:fill;">
+        </div>
+        <div style="padding:8px 10px;">
+          <div style="font-weight:600;font-size:12.5px;margin-bottom:6px;">${s.name}${s.isMine ? ' (내 스타일)' : ''}${isActive ? ' ✓' : ''}</div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;"></div>
+        </div>
+      `;
+      const btnRow = card.querySelector('div[style*="flex-wrap"]');
+      if(!isActive){
+        const selBtn = document.createElement('button');
+        selBtn.type='button'; selBtn.className='btn-ghost'; selBtn.textContent='선택';
+        selBtn.addEventListener('click', async ()=>{
+          const result = await updateMyCoverStyle(s.id);
+          if(!result.ok){ alert('선택 실패: ' + result.message); return; }
+          myProfile.cover_style_id = s.id;
+          await loadAllStyles();
+        });
+        btnRow.appendChild(selBtn);
+      }
+      if(s.isMine){
+        const editBtn = document.createElement('button');
+        editBtn.type='button'; editBtn.className='btn-ghost'; editBtn.textContent='수정';
+        editBtn.addEventListener('click', ()=> startEditMyStyle(s));
+        btnRow.appendChild(editBtn);
+        const delBtn = document.createElement('button');
+        delBtn.type='button'; delBtn.className='btn-ghost'; delBtn.style.color='#a94136'; delBtn.textContent='삭제';
+        delBtn.addEventListener('click', async ()=>{
+          if(!confirm('"' + s.name + '" 스타일을 삭제할까요?')) return;
+          const result = await deleteMyCoverStyleRow(s.id);
+          if(!result.ok){ alert('삭제 실패: ' + result.message); return; }
+          if(editingMyStyleId === s.id) resetMyStyleEditor();
+          await loadAllStyles();
+        });
+        btnRow.appendChild(delBtn);
+      }
+      wrap.appendChild(card);
     });
   }
+
+  /* ============================ 내 스타일 추가/수정 (드래그 위치 지정) ============================ */
+  let editingMyStyleId = null;
+  let pendingMyStyleFile = null;
+  let myStyleXRatio = 0.2;
+  let myStyleYRatio = 0.12;
+  const MY_BADGE_W_RATIO = 0.28;
+  const MY_BADGE_H_PT = 60;
+  const MY_A4_H_PT = 210 * 2.834645669;
+  const MY_BADGE_H_RATIO = MY_BADGE_H_PT / MY_A4_H_PT;
+
+  function clampMyRatio(x, y){
+    const halfW = MY_BADGE_W_RATIO / 2, halfH = MY_BADGE_H_RATIO / 2;
+    return { x: Math.max(halfW, Math.min(1 - halfW, x)), y: Math.max(halfH, Math.min(1 - halfH, y)) };
+  }
+  function updateMyBadgePosition(){
+    const badge = document.getElementById('myStyleBadge');
+    badge.style.width = (MY_BADGE_W_RATIO * 100) + '%';
+    badge.style.height = (MY_BADGE_H_RATIO * 100) + '%';
+    badge.style.left = ((myStyleXRatio - MY_BADGE_W_RATIO / 2) * 100) + '%';
+    badge.style.top = ((myStyleYRatio - MY_BADGE_H_RATIO / 2) * 100) + '%';
+  }
+  function setMyRatioFromPoint(clientX, clientY){
+    const wrap = document.getElementById('myStylePreviewWrap');
+    const rect = wrap.getBoundingClientRect();
+    const clamped = clampMyRatio((clientX - rect.left) / rect.width, (clientY - rect.top) / rect.height);
+    myStyleXRatio = clamped.x; myStyleYRatio = clamped.y;
+    updateMyBadgePosition();
+  }
+  function showMyStylePreview(url){
+    document.getElementById('myStylePreviewImg').src = url;
+    document.getElementById('myStylePreviewWrap').style.display = 'block';
+    document.getElementById('myStylePreviewHint').style.display = 'none';
+    updateMyBadgePosition();
+  }
+  function resetMyStyleEditor(){
+    editingMyStyleId = null; pendingMyStyleFile = null;
+    myStyleXRatio = 0.2; myStyleYRatio = 0.12;
+    document.getElementById('myStyleEditorTitle').textContent = '내 스타일 추가';
+    document.getElementById('myStyleNameInput').value = '';
+    document.getElementById('myStyleFileInput').value = '';
+    document.getElementById('myStylePreviewWrap').style.display = 'none';
+    document.getElementById('myStylePreviewHint').style.display = '';
+    document.getElementById('myStylePreviewHint').textContent = '이미지를 선택하면 미리보기가 표시됩니다.';
+    document.getElementById('myStyleSaveBtn').textContent = '추가';
+    document.getElementById('myStyleCancelBtn').style.display = 'none';
+    document.getElementById('myStyleMsg').className = 'msg';
+    document.getElementById('myStyleMsg').textContent = '';
+  }
+  document.getElementById('myStyleFileInput').addEventListener('change', function(){
+    const file = this.files && this.files[0];
+    if(!file) return;
+    pendingMyStyleFile = file;
+    showMyStylePreview(URL.createObjectURL(file));
+  });
+  document.getElementById('myStylePreviewWrap').addEventListener('click', function(e){
+    if(e.target.id === 'myStyleBadge') return;
+    setMyRatioFromPoint(e.clientX, e.clientY);
+  });
+  (function(){
+    const badgeEl = document.getElementById('myStyleBadge');
+    let dragging = false;
+    badgeEl.addEventListener('pointerdown', function(e){ dragging = true; badgeEl.setPointerCapture(e.pointerId); e.stopPropagation(); });
+    badgeEl.addEventListener('pointermove', function(e){ if(!dragging) return; setMyRatioFromPoint(e.clientX, e.clientY); });
+    badgeEl.addEventListener('pointerup', function(){ dragging = false; });
+    badgeEl.addEventListener('pointercancel', function(){ dragging = false; });
+  })();
+  function startEditMyStyle(style){
+    editingMyStyleId = style.id; pendingMyStyleFile = null;
+    myStyleXRatio = Number(style.name_x_ratio); myStyleYRatio = Number(style.name_y_ratio);
+    document.getElementById('myStyleEditorTitle').textContent = '스타일 수정: ' + style.name;
+    document.getElementById('myStyleNameInput').value = style.name;
+    document.getElementById('myStyleFileInput').value = '';
+    document.getElementById('myStyleSaveBtn').textContent = '저장';
+    document.getElementById('myStyleCancelBtn').style.display = 'inline-block';
+    showMyStylePreview(getCoverImageUrl(style.image_path));
+    document.getElementById('myStylePreviewWrap').scrollIntoView({ behavior:'smooth', block:'center' });
+  }
+  document.getElementById('myStyleCancelBtn').addEventListener('click', resetMyStyleEditor);
+  document.getElementById('myStyleSaveBtn').addEventListener('click', async function(){
+    const btn = this;
+    const msg = document.getElementById('myStyleMsg');
+    msg.className = 'msg'; msg.textContent = '';
+    const name = document.getElementById('myStyleNameInput').value.trim();
+    if(!name){ msg.className='msg err show'; msg.textContent='스타일 이름을 입력해주세요.'; return; }
+    if(!editingMyStyleId && !pendingMyStyleFile){ msg.className='msg err show'; msg.textContent='이미지 파일을 선택해주세요.'; return; }
+    btn.disabled = true; btn.textContent = '저장 중...';
+    let result;
+    if(editingMyStyleId){
+      const changes = { name, name_x_ratio: myStyleXRatio, name_y_ratio: myStyleYRatio };
+      if(pendingMyStyleFile){
+        try{ changes.image_path = await uploadMyCoverStyleImage(editingMyStyleId, pendingMyStyleFile); }
+        catch(err){ btn.disabled=false; btn.textContent='저장'; msg.className='msg err show'; msg.textContent='업로드 실패: '+err.message; return; }
+      }
+      result = await updateMyCoverStyleRow(editingMyStyleId, changes);
+    } else {
+      result = await createMyCoverStyle(name, pendingMyStyleFile, myStyleXRatio, myStyleYRatio);
+    }
+    btn.disabled = false; btn.textContent = editingMyStyleId ? '저장' : '추가';
+    if(!result.ok){ msg.className='msg err show'; msg.textContent='저장 실패: ' + result.message; return; }
+    resetMyStyleEditor();
+    await loadAllStyles();
+  });
 
   document.getElementById('saveInfoBtn').addEventListener('click', async ()=>{
     const name = document.getElementById('editName').value.trim();
