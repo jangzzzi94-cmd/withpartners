@@ -64,6 +64,197 @@ async function spendPoints(feature){
   return data === true;
 }
 
+async function requireAdmin(){
+  const session = await requireLogin();
+  if(!session) return null;
+  const profile = await getMyProfile();
+  if(!profile || profile.role !== 'admin'){
+    window.location.href = 'dashboard.html';
+    return null;
+  }
+  return profile;
+}
+
+/* ---- 회원 탈퇴 ---- */
+async function deleteMyAccount(){
+  const { error } = await supabaseClient.rpc('delete_my_account');
+  if(error){ console.error(error); return { ok:false, message:error.message }; }
+  try{ await supabaseClient.auth.signOut(); }catch(e){}
+  return { ok:true };
+}
+
+async function adminDeleteAccount(userId){
+  const { error } = await supabaseClient.rpc('admin_delete_account', { p_user_id: userId });
+  if(error){ console.error(error); return { ok:false, message:error.message }; }
+  return { ok:true };
+}
+
+/* ---- 이용 규칙(사용방법) ---- */
+async function getSiteRules(){
+  const { data, error } = await supabaseClient
+    .from('site_rules')
+    .select('id, title, content, sort_order, updated_at')
+    .order('sort_order', { ascending: true });
+  if(error){ console.error(error); return []; }
+  return data || [];
+}
+
+async function adminSaveSiteRule(id, title, content){
+  const { error } = await supabaseClient
+    .from('site_rules')
+    .update({ title, content, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if(error) return { ok:false, message:error.message };
+  return { ok:true };
+}
+
+async function adminAddSiteRule(title, content, sortOrder){
+  const { data, error } = await supabaseClient
+    .from('site_rules')
+    .insert({ title, content, sort_order: sortOrder })
+    .select('id, title, content, sort_order')
+    .single();
+  if(error) return { ok:false, message:error.message };
+  return { ok:true, row:data };
+}
+
+async function adminDeleteSiteRule(id){
+  const { error } = await supabaseClient.from('site_rules').delete().eq('id', id);
+  if(error) return { ok:false, message:error.message };
+  return { ok:true };
+}
+
+/* ---- 포인트 지급/사용 로그 (관리자 전용 조회) ---- */
+async function getPointLogs(limit){
+  const { data, error } = await supabaseClient
+    .from('point_logs')
+    .select('id, user_id, delta, reason, note, actor_id, created_at')
+    .order('created_at', { ascending:false })
+    .limit(limit || 300);
+  if(error){ console.error(error); return []; }
+  return data || [];
+}
+
+/* ---- 크레딧 단가 수정 (관리자) ---- */
+async function adminUpdatePointCost(feature, cost){
+  const { error } = await supabaseClient.from('point_costs').update({ cost }).eq('feature', feature);
+  if(error) return { ok:false, message:error.message };
+  return { ok:true };
+}
+
+/* ---- 보장분석표 표지 스타일 ---- */
+function loadImageFromFile(file){
+  return new Promise(function(resolve, reject){
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = function(){ URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error('이미지 파일을 읽을 수 없습니다.')); };
+    img.src = url;
+  });
+}
+
+async function fileToPngBlob(file, maxSize){
+  const img = await loadImageFromFile(file);
+  const w0 = img.naturalWidth, h0 = img.naturalHeight;
+  if(!w0 || !h0) throw new Error('이미지 크기를 확인할 수 없습니다.');
+  const scale = Math.min(1, (maxSize || 1600) / Math.max(w0, h0));
+  const w = Math.max(1, Math.round(w0 * scale));
+  const h = Math.max(1, Math.round(h0 * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+  return new Promise(function(resolve, reject){
+    canvas.toBlob(function(blob){
+      if(blob) resolve(blob); else reject(new Error('이미지 변환에 실패했습니다.'));
+    }, 'image/png');
+  });
+}
+
+function getCoverImageUrl(path){
+  const { data } = supabaseClient.storage.from('cover-images').getPublicUrl(path);
+  return data.publicUrl + '?v=' + Math.floor(Date.now() / 1000);
+}
+
+async function getCoverStyles(){
+  const { data, error } = await supabaseClient
+    .from('cover_styles')
+    .select('id, name, image_path, name_x_ratio, name_y_ratio, is_default, sort_order, created_at')
+    .order('sort_order', { ascending:true })
+    .order('created_at', { ascending:true });
+  if(error){ console.error(error); return []; }
+  return data || [];
+}
+
+async function uploadCoverStyleImage(styleId, file){
+  const blob = await fileToPngBlob(file, 1600);
+  const path = 'styles/' + styleId + '.png';
+  const { error } = await supabaseClient.storage
+    .from('cover-images')
+    .upload(path, blob, { upsert:true, contentType:'image/png' });
+  if(error) throw new Error(error.message);
+  return path;
+}
+
+async function createCoverStyle(name, file, nameXRatio, nameYRatio){
+  try{
+    const styleId = (crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(16).slice(2)));
+    const path = await uploadCoverStyleImage(styleId, file);
+    const { data: existing } = await supabaseClient.from('cover_styles').select('id');
+    const isFirst = !existing || existing.length === 0;
+    const { error } = await supabaseClient.from('cover_styles').insert({
+      id: styleId, name, image_path: path,
+      name_x_ratio: nameXRatio, name_y_ratio: nameYRatio, is_default: isFirst,
+    });
+    if(error) return { ok:false, message:error.message };
+    return { ok:true, id: styleId };
+  }catch(err){
+    return { ok:false, message: err.message };
+  }
+}
+
+async function updateCoverStyle(styleId, changes){
+  const { error } = await supabaseClient.from('cover_styles').update(changes).eq('id', styleId);
+  if(error) return { ok:false, message:error.message };
+  return { ok:true };
+}
+
+async function deleteCoverStyle(styleId){
+  await supabaseClient.storage.from('cover-images').remove(['styles/' + styleId + '.png']);
+  const { error } = await supabaseClient.from('cover_styles').delete().eq('id', styleId);
+  if(error) return { ok:false, message:error.message };
+  return { ok:true };
+}
+
+async function setDefaultCoverStyle(styleId){
+  const { error } = await supabaseClient.rpc('set_default_cover_style', { p_style_id: styleId });
+  if(error) return { ok:false, message:error.message };
+  return { ok:true };
+}
+
+async function getMyEffectiveCoverStyle(profile){
+  if(profile && profile.cover_style_id){
+    const { data, error } = await supabaseClient
+      .from('cover_styles')
+      .select('id, name, image_path, name_x_ratio, name_y_ratio, is_default')
+      .eq('id', profile.cover_style_id)
+      .maybeSingle();
+    if(!error && data) return data;
+  }
+  const { data, error } = await supabaseClient
+    .from('cover_styles')
+    .select('id, name, image_path, name_x_ratio, name_y_ratio, is_default')
+    .eq('is_default', true)
+    .maybeSingle();
+  if(error){ console.error(error); return null; }
+  return data || null;
+}
+
+async function updateMyCoverStyle(styleId){
+  const { error } = await supabaseClient.rpc('update_my_cover_style', { p_style_id: styleId });
+  if(error) return { ok:false, message:error.message };
+  return { ok:true };
+}
+
 // ── 관리자 전용 함수 (admin.html에서만 사용) ──
 
 async function adminListProfiles(){
