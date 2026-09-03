@@ -370,6 +370,19 @@
   <div class="hero-inner">
     <div class="eyebrow">Family Coverage Report</div>
     <h1>가족 보장분석 통합 리포트</h1>
+    <div class="card" id="featureGuideBox" style="margin-bottom:22px;display:none;">
+  <p class="desc" style="margin:0;" id="featureGuideText"></p>
+</div>
+<script>
+  (async function(){
+    if(typeof getFeatureGuide !== 'function') return;
+    const text = await getFeatureGuide('family_coverage');
+    if(text && text.trim()){
+      document.getElementById('featureGuideText').textContent = text;
+      document.getElementById('featureGuideBox').style.display = 'block';
+    }
+  })();
+</script>
     <p class="sub">가족 구성원별 보장분석표(전·후)를 한 번에 모아, 보장 변화와 보험료 절감 효과를 하나의 리포트로 확인합니다.</p>
 
     <div id="heroStats"></div>
