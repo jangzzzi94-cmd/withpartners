@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>관리자 | With Partner</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#13233F; --navy-light:#1D3358; --gold:#B08D57;
+    --paper:#FAF8F3; --ink:#1B1F27; --ink-soft:#5B6270; --line:#E4DFD3; --error:#B3402A; --ok:#2f7d4d;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Pretendard',sans-serif;color:var(--ink);background:var(--paper);}
+  header{background:var(--navy);color:#F2EFE6;padding:22px 48px;display:flex;justify-content:space-between;align-items:center;}
+  .wordmark{font-family:'Noto Serif KR',serif;font-size:19px;font-weight:700;}
+  .wordmark span{color:var(--gold);}
+  nav a, nav button{color:#F2EFE6;text-decoration:none;font-size:13px;opacity:0.85;margin-left:18px;
+    background:none;border:1px solid rgba(242,239,230,0.4);padding:8px 14px;border-radius:2px;cursor:pointer;font-family:inherit;}
+  main{max-width:1100px;margin:0 auto;padding:44px 24px 80px;}
+  h1{font-family:'Noto Serif KR',serif;font-size:22px;font-weight:700;margin:0 0 6px 0;}
+  .sub{color:var(--ink-soft);font-size:13.5px;margin:0 0 28px 0;}
+  .search-row{margin-bottom:18px;}
+  .search-row input{width:100%;max-width:320px;padding:10px 14px;border:1px solid var(--line);border-radius:2px;font-size:14px;font-family:inherit;}
+  table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);font-size:13.5px;}
+  th, td{padding:12px 14px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle;}
+  th{background:#F5F2EA;font-size:12.5px;color:var(--ink-soft);font-weight:700;}
+  tr.suspended{background:#FBF0EE;}
+  .role-badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;}
+  .role-admin{background:#F2ECDD;color:var(--gold);}
+  .role-user{background:#EEF0F3;color:var(--ink-soft);}
+  .suspended-badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:#F7EAE6;color:var(--error);}
+  .points-cell{font-weight:700;color:var(--navy);}
+  .actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+  .actions input{width:70px;padding:6px 8px;border:1px solid var(--line);border-radius:2px;font-size:12.5px;}
+  .btn-sm{padding:6px 10px;border-radius:2px;font-size:12px;font-weight:600;border:1px solid var(--line);
+    background:#fff;color:var(--ink);cursor:pointer;font-family:inherit;}
+  .btn-sm.primary{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .btn-sm.danger{background:#fff;color:var(--error);border-color:#E9C6BB;}
+  .btn-sm.ok{background:#fff;color:var(--ok);border-color:#C7DAC5;}
+  .loading{padding:40px;text-align:center;color:var(--ink-soft);}
+</style>
+</head>
+<body>
+<header>
+  <div class="wordmark">With<span>·</span>Partner</div>
+  <nav>
+    <a href="dashboard.html">대시보드</a>
+    <button onclick="handleLogout()">로그아웃</button>
+  </nav>
+</header>
+
+<main>
+  <h1>회원 관리</h1>
+  <p class="sub">전체 회원 목록, 보유 크레딧 조정, 계정 정지/해제를 관리할 수 있습니다.</p>
+
+  <div class="search-row">
+    <input type="text" id="searchInput" placeholder="이메일 또는 닉네임으로 검색">
+  </div>
+
+  <div id="tableWrap">
+    <div class="loading">불러오는 중…</div>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-client.js"></script>
+<script>
+  let allProfiles = [];
+
+  async function adminListProfiles(){
+    const { data, error } = await supabaseClient.rpc("admin_list_profiles");
+    if(error){ console.error(error); return []; }
+    return data || [];
+  }
+
+  async function adminAddPointsCall(userId, amount, note){
+    const { data, error } = await supabaseClient.rpc("admin_add_points", {
+      p_user_id: userId, p_amount: amount, p_note: note || null,
+    });
+    if(error) return { ok:false, message: error.message };
+    return { ok:true, points: data };
+  }
+
+  async function adminSetSuspendedCall(userId, suspended){
+    const { data, error } = await supabaseClient.rpc("admin_set_suspended", {
+      p_user_id: userId, p_suspended: suspended,
+    });
+    if(error) return { ok:false, message: error.message };
+    return { ok:true };
+  }
+
+  function fmtDate(iso){
+    if(!iso) return "";
+    const d = new Date(iso);
+    return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+  }
+
+  function renderTable(list){
+    const wrap = document.getElementById("tableWrap");
+    if(!list.length){
+      wrap.innerHTML = '<div class="loading">회원이 없습니다.</div>';
+      return;
+    }
+    let html = '<table><thead><tr>' +
+      '<th>이메일</th><th>닉네임</th><th>권한</th><th>보유 크레딧</th><th>가입일</th><th>상태</th><th>작업</th>' +
+      '</tr></thead><tbody>';
+
+    list.forEach(p=>{
+      const roleClass = p.role === 'admin' ? 'role-admin' : 'role-user';
+      html += `<tr class="${p.suspended ? 'suspended' : ''}" data-id="${p.id}">
+        <td>${p.email || ''}</td>
+        <td>${p.nickname || ''}</td>
+        <td><span class="role-badge ${roleClass}">${p.role}</span></td>
+        <td class="points-cell">${(p.points||0).toLocaleString()}</td>
+        <td>${fmtDate(p.created_at)}</td>
+        <td>${p.suspended ? '<span class="suspended-badge">정지됨</span>' : '정상'}</td>
+        <td>
+          <div class="actions">
+            <input type="number" placeholder="크레딧" class="amountInput">
+            <button class="btn-sm primary" onclick="handleAddPoints('${p.id}', 1)">추가</button>
+            <button class="btn-sm" onclick="handleAddPoints('${p.id}', -1)">차감</button>
+            ${p.suspended
+              ? `<button class="btn-sm ok" onclick="handleSuspend('${p.id}', false)">정지 해제</button>`
+              : `<button class="btn-sm danger" onclick="handleSuspend('${p.id}', true)">정지</button>`
+            }
+          </div>
+        </td>
+      </tr>`;
+    });
+
+    html += '</tbody></table>';
+    wrap.innerHTML = html;
+  }
+
+  async function handleAddPoints(userId, sign){
+    const row = document.querySelector(`tr[data-id="${userId}"]`);
+    const input = row.querySelector(".amountInput");
+    const raw = parseInt(input.value, 10);
+    if(!raw || raw <= 0){ alert("추가/차감할 크레딧 숫자를 입력하세요."); return; }
+
+    const amount = raw * sign;
+    const note = sign > 0 ? "관리자 지급" : "관리자 차감";
+    const result = await adminAddPointsCall(userId, amount, note);
+    if(!result.ok){ alert("처리 실패: " + result.message); return; }
+
+    await loadAndRender();
+  }
+
+  async function handleSuspend(userId, suspended){
+    if(suspended && !confirm("이 계정을 정지하시겠습니까? 정지된 계정은 로그인은 되지만 모든 기능 이용이 불가능해집니다.")) return;
+    const result = await adminSetSuspendedCall(userId, suspended);
+    if(!result.ok){ alert("처리 실패: " + result.message); return; }
+    await loadAndRender();
+  }
+
+  document.getElementById("searchInput").addEventListener("input", (e)=>{
+    const q = e.target.value.trim().toLowerCase();
+    const filtered = !q ? allProfiles : allProfiles.filter(p=>
+      (p.email||"").toLowerCase().includes(q) || (p.nickname||"").toLowerCase().includes(q)
+    );
+    renderTable(filtered);
+  });
+
+  async function loadAndRender(){
+    allProfiles = await adminListProfiles();
+    renderTable(allProfiles);
+  }
+
+  async function handleLogout(){
+    await logout();
+  }
+
+  (async ()=>{
+    const session = await requireLogin();
+    if(!session) return;
+    const profile = await getMyProfile();
+    if(!profile || profile.role !== 'admin'){
+      alert("관리자만 접근할 수 있습니다.");
+      window.location.href = "dashboard.html";
+      return;
+    }
+    await loadAndRender();
+  })();
+</script>
+</body>
+</html>

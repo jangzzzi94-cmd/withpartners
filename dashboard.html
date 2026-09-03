@@ -17,6 +17,8 @@
   header{background:var(--navy);color:#F2EFE6;padding:22px 48px;display:flex;justify-content:space-between;align-items:center;}
   .wordmark{font-family:'Noto Serif KR',serif;font-size:19px;font-weight:700;}
   .wordmark span{color:var(--gold);}
+  nav a, nav button{color:#F2EFE6;text-decoration:none;font-size:13px;opacity:0.85;margin-left:18px;
+    background:none;border:none;cursor:pointer;font-family:inherit;}
   .logout{background:none;border:1px solid rgba(242,239,230,0.4);color:#F2EFE6;padding:8px 16px;
     border-radius:2px;font-size:13px;cursor:pointer;font-family:'Pretendard',sans-serif;}
   main{max-width:900px;margin:0 auto;padding:56px 24px;}
@@ -42,7 +44,10 @@
 <body>
 <header>
   <div class="wordmark">With<span>·</span>Partner</div>
-  <button class="logout" onclick="handleLogout()">로그아웃</button>
+  <nav>
+    <a href="admin.html" id="adminLink" style="display:none;">관리자</a>
+    <button class="logout" onclick="handleLogout()">로그아웃</button>
+  </nav>
 </header>
 
 <main>
@@ -87,6 +92,17 @@
     document.getElementById('userEmail').textContent = session.user.email;
 
     const profile = await getMyProfile();
+
+    if(profile && profile.suspended){
+      alert('이 계정은 정지되었습니다. 관리자에게 문의해주세요.');
+      await logout();
+      return;
+    }
+
+    if(profile && profile.role === 'admin'){
+      document.getElementById('adminLink').style.display = 'inline';
+    }
+
     const costs = await getPointCosts();
 
     const points = profile ? (profile.points || 0) : 0;
@@ -96,14 +112,15 @@
     document.getElementById('coverageCost').textContent = '1회 ' + costs.coverage + '크레딧';
     document.getElementById('familyCost').textContent = '1회 ' + costs.family_coverage + '크레딧';
 
-    wireCard('historyCard', 'history.html', costs.history, points);
-    wireCard('coverageCard', 'coverage.html', costs.coverage, points);
-    wireCard('familyCard', 'family-coverage.html', costs.family_coverage, points);
+    wireCard('historyCard', 'history.html', costs.history, points, profile);
+    wireCard('coverageCard', 'coverage.html', costs.coverage, points, profile);
+    wireCard('familyCard', 'family-coverage.html', costs.family_coverage, points, profile);
   }
 
-  function wireCard(cardId, targetUrl, cost, currentPoints){
+  function wireCard(cardId, targetUrl, cost, currentPoints, profile){
     document.getElementById(cardId).addEventListener('click', function(){
-      if(currentPoints < cost){
+      const isAdmin = profile && (profile.role === 'admin' || profile.role === 'gold');
+      if(!isAdmin && currentPoints < cost){
         const go = confirm('크레딧이 부족합니다. (필요: ' + cost + '크레딧 / 보유: ' + currentPoints + '크레딧)\n충전 페이지로 이동할까요?');
         if(go) window.location.href = 'charge.html';
         return;
