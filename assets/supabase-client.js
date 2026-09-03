@@ -64,6 +64,12 @@ async function spendPoints(feature){
   return data === true;
 }
 
+async function adminListProfiles(){
+  const { data, error } = await supabaseClient.rpc('admin_list_profiles');
+  if(error){ console.error(error); return []; }
+  return data || [];
+}
+
 async function requireAdmin(){
   const session = await requireLogin();
   if(!session) return null;
