@@ -255,6 +255,36 @@ async function updateMyCoverStyle(styleId){
   return { ok:true };
 }
 
+async function updateMyCoverPosition(x, y){
+  const { error } = await supabaseClient.rpc('update_my_cover_position', { p_x: x, p_y: y });
+  if(error) return { ok:false, message:error.message };
+  return { ok:true };
+}
+
+async function updateMyPassword(newPassword){
+  const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
+  if(error) return { ok:false, message:error.message };
+  return { ok:true };
+}
+
+async function getFeatureGuide(feature){
+  const { data, error } = await supabaseClient
+    .from('feature_guides')
+    .select('content')
+    .eq('feature', feature)
+    .maybeSingle();
+  if(error){ console.error(error); return ''; }
+  return data ? data.content : '';
+}
+
+async function adminSaveFeatureGuide(feature, content){
+  const { error } = await supabaseClient
+    .from('feature_guides')
+    .upsert({ feature, content, updated_at: new Date().toISOString() });
+  if(error) return { ok:false, message:error.message };
+  return { ok:true };
+}
+
 // ── 관리자 전용 함수 (admin.html에서만 사용) ──
 
 async function adminListProfiles(){
