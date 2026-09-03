@@ -261,6 +261,71 @@ async function updateMyCoverStyle(styleId){
   return { ok:true };
 }
 
+/* ---- 회원 개인 표지 스타일 (owner_id = 본인) ---- */
+async function getMyCoverStyles(){
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if(!session) return [];
+  const { data, error } = await supabaseClient
+    .from('cover_styles')
+    .select('id, name, image_path, name_x_ratio, name_y_ratio, is_default, owner_id, created_at')
+    .eq('owner_id', session.user.id)
+    .order('created_at', { ascending:true });
+  if(error){ console.error(error); return []; }
+  return data || [];
+}
+
+async function uploadMyCoverStyleImage(styleId, file){
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  const blob = await fileToPngBlob(file, 1600);
+  const path = 'user-styles/' + session.user.id + '/' + styleId + '.png';
+  const { error } = await supabaseClient.storage
+    .from('cover-images')
+    .upload(path, blob, { upsert:true, contentType:'image/png' });
+  if(error) throw new Error(error.message);
+  return path;
+}
+
+async function createMyCoverStyle(name, file, nameXRatio, nameYRatio){
+  try{
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    const styleId = (crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(16).slice(2)));
+    const path = await uploadMyCoverStyleImage(styleId, file);
+    const { error } = await supabaseClient.from('cover_styles').insert({
+      id: styleId, name, image_path: path,
+      name_x_ratio: nameXRatio, name_y_ratio: nameYRatio,
+      owner_id: session.user.id, is_default: false,
+    });
+    if(error) return { ok:false, message:error.message };
+    return { ok:true, id: styleId };
+  }catch(err){
+    return { ok:false, message: err.message };
+  }
+}
+
+async function updateMyCoverStyleRow(styleId, changes){
+  const { error } = await supabaseClient.from('cover_styles').update(changes).eq('id', styleId);
+  if(error) return { ok:false, message:error.message };
+  return { ok:true };
+}
+
+async function deleteMyCoverStyleRow(styleId){
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  await supabaseClient.storage.from('cover-images').remove(['user-styles/' + session.user.id + '/' + styleId + '.png']);
+  const { error } = await supabaseClient.from('cover_styles').delete().eq('id', styleId);
+  if(error) return { ok:false, message:error.message };
+  return { ok:true };
+}
+
+async function getPublicCoverStyles(){
+  const { data, error } = await supabaseClient
+    .from('cover_styles')
+    .select('id, name, image_path, name_x_ratio, name_y_ratio, is_default, owner_id')
+    .is('owner_id', null)
+    .order('sort_order', { ascending:true });
+  if(error){ console.error(error); return []; }
+  return data || [];
+}
+
 async function updateMyCoverPosition(x, y){
   const { error } = await supabaseClient.rpc('update_my_cover_position', { p_x: x, p_y: y });
   if(error) return { ok:false, message:error.message };
