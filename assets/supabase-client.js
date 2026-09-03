@@ -33,7 +33,7 @@ async function getMyProfile(){
   if(!session) return null;
   const { data, error } = await supabaseClient
     .from("profiles")
-    .select("id, email, role, points, nickname, suspended, created_at")
+    .select("id, email, role, points, nickname, name, birth, suspended, created_at")
     .eq("id", session.user.id)
     .single();
   if(error){
