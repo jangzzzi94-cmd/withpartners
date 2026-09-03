@@ -19,10 +19,18 @@
   .wordmark span{color:var(--gold);}
   nav a, nav button{color:#F2EFE6;text-decoration:none;font-size:13px;opacity:0.85;margin-left:18px;
     background:none;border:1px solid rgba(242,239,230,0.4);padding:8px 14px;border-radius:2px;cursor:pointer;font-family:inherit;}
-  main{max-width:1100px;margin:0 auto;padding:44px 24px 80px;}
+  main{max-width:1100px;margin:0 auto;padding:36px 24px 80px;}
   h1{font-family:'Noto Serif KR',serif;font-size:22px;font-weight:700;margin:0 0 6px 0;}
-  .sub{color:var(--ink-soft);font-size:13.5px;margin:0 0 28px 0;}
-  .search-row{margin-bottom:18px;}
+  .sub{color:var(--ink-soft);font-size:13.5px;margin:0 0 22px 0;}
+
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:24px;flex-wrap:wrap;}
+  .tab{padding:10px 16px;font-size:13.5px;font-weight:600;color:var(--ink-soft);background:none;border:none;
+    cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;font-family:inherit;}
+  .tab.active{color:var(--navy);border-bottom-color:var(--gold);}
+  .panel{display:none;}
+  .panel.active{display:block;}
+
+  .search-row{margin-bottom:16px;}
   .search-row input{width:100%;max-width:320px;padding:10px 14px;border:1px solid var(--line);border-radius:2px;font-size:14px;font-family:inherit;}
   table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);font-size:13.5px;}
   th, td{padding:12px 14px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle;}
@@ -41,6 +49,26 @@
   .btn-sm.danger{background:#fff;color:var(--error);border-color:#E9C6BB;}
   .btn-sm.ok{background:#fff;color:var(--ok);border-color:#C7DAC5;}
   .loading{padding:40px;text-align:center;color:var(--ink-soft);}
+
+  .card{border:1px solid var(--line);background:#fff;border-radius:2px;padding:20px;margin-bottom:16px;}
+  .field-row{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
+  .field-row input, .field-row textarea{padding:9px 12px;border:1px solid var(--line);border-radius:2px;font-size:13.5px;font-family:inherit;}
+  .field-row input.title-input{flex:1;min-width:180px;}
+  .field-row textarea{width:100%;min-height:70px;font-family:inherit;}
+  .rule-item{border-bottom:1px solid var(--line);padding:14px 0;}
+  .rule-item:last-child{border-bottom:none;}
+  .rule-title{font-weight:700;font-size:14px;margin-bottom:4px;}
+
+  .cost-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);}
+  .cost-row:last-child{border-bottom:none;}
+  .cost-row .feature-label{width:160px;font-weight:600;font-size:13.5px;}
+  .cost-row input{width:100px;padding:8px 10px;border:1px solid var(--line);border-radius:2px;font-size:13.5px;}
+
+  .style-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;}
+  .style-card{border:1px solid var(--line);border-radius:2px;padding:12px;background:#fff;text-align:center;}
+  .style-card img{width:100%;height:110px;object-fit:cover;border-radius:2px;margin-bottom:8px;background:#F5F2EA;}
+  .style-card .name{font-size:13px;font-weight:600;margin-bottom:6px;}
+  .default-tag{display:inline-block;font-size:10.5px;font-weight:700;color:var(--gold);background:#F2ECDD;padding:2px 6px;border-radius:8px;margin-bottom:6px;}
 </style>
 </head>
 <body>
@@ -48,20 +76,73 @@
   <div class="wordmark">With<span>·</span>Partner</div>
   <nav>
     <a href="dashboard.html">대시보드</a>
+    <a href="admin-limits.html">당타사한도</a>
     <button onclick="handleLogout()">로그아웃</button>
   </nav>
 </header>
 
 <main>
-  <h1>회원 관리</h1>
-  <p class="sub">전체 회원 목록, 보유 크레딧 조정, 계정 정지/해제를 관리할 수 있습니다.</p>
+  <h1>관리자</h1>
+  <p class="sub">회원, 이용방법, 크레딧 단가, 포인트 로그, 표지 스타일을 관리합니다.</p>
 
-  <div class="search-row">
-    <input type="text" id="searchInput" placeholder="이메일 또는 닉네임으로 검색">
+  <div class="tabs">
+    <button class="tab active" data-panel="p-members">회원관리</button>
+    <button class="tab" data-panel="p-rules">이용방법</button>
+    <button class="tab" data-panel="p-costs">크레딧 단가</button>
+    <button class="tab" data-panel="p-logs">포인트 로그</button>
+    <button class="tab" data-panel="p-styles">표지 스타일</button>
   </div>
 
-  <div id="tableWrap">
-    <div class="loading">불러오는 중…</div>
+  <!-- ===== 회원관리 ===== -->
+  <div class="panel active" id="p-members">
+    <div class="search-row">
+      <input type="text" id="searchInput" placeholder="이메일 또는 닉네임으로 검색">
+    </div>
+    <div id="tableWrap"><div class="loading">불러오는 중…</div></div>
+  </div>
+
+  <!-- ===== 이용방법 ===== -->
+  <div class="panel" id="p-rules">
+    <div class="card">
+      <h3 style="margin:0 0 10px;font-size:15px;">새 안내 추가</h3>
+      <div class="field-row">
+        <input type="text" id="newRuleTitle" class="title-input" placeholder="제목 (예: 병력정리 이용법)">
+      </div>
+      <div class="field-row">
+        <textarea id="newRuleContent" placeholder="내용을 입력하세요"></textarea>
+      </div>
+      <button class="btn-sm primary" onclick="handleAddRule()">추가</button>
+    </div>
+    <div class="card" id="rulesListWrap"><div class="loading">불러오는 중…</div></div>
+  </div>
+
+  <!-- ===== 크레딧 단가 ===== -->
+  <div class="panel" id="p-costs">
+    <div class="card" id="costsWrap"><div class="loading">불러오는 중…</div></div>
+  </div>
+
+  <!-- ===== 포인트 로그 ===== -->
+  <div class="panel" id="p-logs">
+    <div id="logsWrap"><div class="loading">불러오는 중…</div></div>
+  </div>
+
+  <!-- ===== 표지 스타일 ===== -->
+  <div class="panel" id="p-styles">
+    <div class="card">
+      <h3 style="margin:0 0 10px;font-size:15px;">새 스타일 추가</h3>
+      <div class="field-row">
+        <input type="text" id="newStyleName" class="title-input" placeholder="스타일 이름">
+        <input type="file" id="newStyleFile" accept="image/*">
+      </div>
+      <div class="field-row">
+        <label style="font-size:12.5px;color:var(--ink-soft);">고객명 배지 X 위치(0~1)</label>
+        <input type="number" id="newStyleX" value="0.5" step="0.01" min="0" max="1" style="width:80px;">
+        <label style="font-size:12.5px;color:var(--ink-soft);">Y 위치(0~1)</label>
+        <input type="number" id="newStyleY" value="0.5" step="0.01" min="0" max="1" style="width:80px;">
+      </div>
+      <button class="btn-sm primary" onclick="handleAddStyle()">업로드</button>
+    </div>
+    <div class="style-grid" id="stylesWrap"></div>
   </div>
 </main>
 
@@ -70,26 +151,21 @@
 <script>
   let allProfiles = [];
 
+  /* ---------------- 탭 전환 ---------------- */
+  document.querySelectorAll('.tab').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(btn.dataset.panel).classList.add('active');
+    });
+  });
+
+  /* ---------------- 회원관리 ---------------- */
   async function adminListProfiles(){
     const { data, error } = await supabaseClient.rpc("admin_list_profiles");
     if(error){ console.error(error); return []; }
     return data || [];
-  }
-
-  async function adminAddPointsCall(userId, amount, note){
-    const { data, error } = await supabaseClient.rpc("admin_add_points", {
-      p_user_id: userId, p_amount: amount, p_note: note || null,
-    });
-    if(error) return { ok:false, message: error.message };
-    return { ok:true, points: data };
-  }
-
-  async function adminSetSuspendedCall(userId, suspended){
-    const { data, error } = await supabaseClient.rpc("admin_set_suspended", {
-      p_user_id: userId, p_suspended: suspended,
-    });
-    if(error) return { ok:false, message: error.message };
-    return { ok:true };
   }
 
   function fmtDate(iso){
@@ -98,16 +174,12 @@
     return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
   }
 
-  function renderTable(list){
+  function renderMembers(list){
     const wrap = document.getElementById("tableWrap");
-    if(!list.length){
-      wrap.innerHTML = '<div class="loading">회원이 없습니다.</div>';
-      return;
-    }
+    if(!list.length){ wrap.innerHTML = '<div class="loading">회원이 없습니다.</div>'; return; }
     let html = '<table><thead><tr>' +
       '<th>이메일</th><th>닉네임</th><th>권한</th><th>보유 크레딧</th><th>가입일</th><th>상태</th><th>작업</th>' +
       '</tr></thead><tbody>';
-
     list.forEach(p=>{
       const roleClass = p.role === 'admin' ? 'role-admin' : 'role-user';
       html += `<tr class="${p.suspended ? 'suspended' : ''}" data-id="${p.id}">
@@ -126,11 +198,11 @@
               ? `<button class="btn-sm ok" onclick="handleSuspend('${p.id}', false)">정지 해제</button>`
               : `<button class="btn-sm danger" onclick="handleSuspend('${p.id}', true)">정지</button>`
             }
+            <button class="btn-sm danger" onclick="handleDeleteAccount('${p.id}', '${(p.email||'').replace(/'/g,"")}')">탈퇴</button>
           </div>
         </td>
       </tr>`;
     });
-
     html += '</tbody></table>';
     wrap.innerHTML = html;
   }
@@ -140,20 +212,25 @@
     const input = row.querySelector(".amountInput");
     const raw = parseInt(input.value, 10);
     if(!raw || raw <= 0){ alert("추가/차감할 크레딧 숫자를 입력하세요."); return; }
-
     const amount = raw * sign;
     const note = sign > 0 ? "관리자 지급" : "관리자 차감";
-    const result = await adminAddPointsCall(userId, amount, note);
-    if(!result.ok){ alert("처리 실패: " + result.message); return; }
-
-    await loadAndRender();
+    const { data, error } = await supabaseClient.rpc("admin_add_points", { p_user_id: userId, p_amount: amount, p_note: note });
+    if(error){ alert("처리 실패: " + error.message); return; }
+    await loadMembers();
   }
 
   async function handleSuspend(userId, suspended){
     if(suspended && !confirm("이 계정을 정지하시겠습니까? 정지된 계정은 로그인은 되지만 모든 기능 이용이 불가능해집니다.")) return;
-    const result = await adminSetSuspendedCall(userId, suspended);
+    const { error } = await supabaseClient.rpc("admin_set_suspended", { p_user_id: userId, p_suspended: suspended });
+    if(error){ alert("처리 실패: " + error.message); return; }
+    await loadMembers();
+  }
+
+  async function handleDeleteAccount(userId, email){
+    if(!confirm(`정말로 ${email} 계정을 탈퇴(완전 삭제)시키겠습니까? 이 작업은 되돌릴 수 없습니다.`)) return;
+    const result = await adminDeleteAccount(userId);
     if(!result.ok){ alert("처리 실패: " + result.message); return; }
-    await loadAndRender();
+    await loadMembers();
   }
 
   document.getElementById("searchInput").addEventListener("input", (e)=>{
@@ -161,29 +238,170 @@
     const filtered = !q ? allProfiles : allProfiles.filter(p=>
       (p.email||"").toLowerCase().includes(q) || (p.nickname||"").toLowerCase().includes(q)
     );
-    renderTable(filtered);
+    renderMembers(filtered);
   });
 
-  async function loadAndRender(){
+  async function loadMembers(){
     allProfiles = await adminListProfiles();
-    renderTable(allProfiles);
+    renderMembers(allProfiles);
   }
 
-  async function handleLogout(){
-    await logout();
+  /* ---------------- 이용방법 ---------------- */
+  async function loadRules(){
+    const rules = await getSiteRules();
+    const wrap = document.getElementById("rulesListWrap");
+    if(!rules.length){ wrap.innerHTML = '등록된 안내가 없습니다.'; return; }
+    wrap.innerHTML = rules.map(r => `
+      <div class="rule-item" data-id="${r.id}">
+        <input type="text" class="title-input rule-title-input" value="${(r.title||'').replace(/"/g,'&quot;')}" style="width:100%;margin-bottom:6px;">
+        <textarea class="rule-content-input" style="width:100%;min-height:70px;">${r.content||''}</textarea>
+        <div style="margin-top:8px;display:flex;gap:6px;">
+          <button class="btn-sm primary" onclick="handleSaveRule('${r.id}')">저장</button>
+          <button class="btn-sm danger" onclick="handleDeleteRule('${r.id}')">삭제</button>
+        </div>
+      </div>
+    `).join('');
   }
+
+  async function handleAddRule(){
+    const title = document.getElementById("newRuleTitle").value.trim();
+    const content = document.getElementById("newRuleContent").value.trim();
+    if(!title || !content){ alert("제목과 내용을 입력하세요."); return; }
+    const result = await adminAddSiteRule(title, content, 0);
+    if(!result.ok){ alert("추가 실패: " + result.message); return; }
+    document.getElementById("newRuleTitle").value = "";
+    document.getElementById("newRuleContent").value = "";
+    await loadRules();
+  }
+
+  async function handleSaveRule(id){
+    const item = document.querySelector(`.rule-item[data-id="${id}"]`);
+    const title = item.querySelector(".rule-title-input").value.trim();
+    const content = item.querySelector(".rule-content-input").value.trim();
+    const result = await adminSaveSiteRule(id, title, content);
+    if(!result.ok){ alert("저장 실패: " + result.message); return; }
+    alert("저장되었습니다.");
+  }
+
+  async function handleDeleteRule(id){
+    if(!confirm("이 안내를 삭제하시겠습니까?")) return;
+    const result = await adminDeleteSiteRule(id);
+    if(!result.ok){ alert("삭제 실패: " + result.message); return; }
+    await loadRules();
+  }
+
+  /* ---------------- 크레딧 단가 ---------------- */
+  const FEATURE_LABELS = { history: '병력정리', coverage: '보장분석표', family_coverage: '가족보장분석' };
+
+  async function loadCosts(){
+    const costs = await getPointCosts();
+    const wrap = document.getElementById("costsWrap");
+    wrap.innerHTML = Object.keys(FEATURE_LABELS).map(feature => `
+      <div class="cost-row">
+        <div class="feature-label">${FEATURE_LABELS[feature]}</div>
+        <input type="number" id="cost-${feature}" value="${costs[feature] ?? ''}">
+        <span style="font-size:13px;color:var(--ink-soft);">크레딧</span>
+        <button class="btn-sm primary" onclick="handleSaveCost('${feature}')">저장</button>
+      </div>
+    `).join('');
+  }
+
+  async function handleSaveCost(feature){
+    const val = parseInt(document.getElementById(`cost-${feature}`).value, 10);
+    if(isNaN(val) || val < 0){ alert("올바른 숫자를 입력하세요."); return; }
+    const result = await adminUpdatePointCost(feature, val);
+    if(!result.ok){ alert("저장 실패: " + result.message); return; }
+    alert("저장되었습니다.");
+  }
+
+  /* ---------------- 포인트 로그 ---------------- */
+  async function loadLogs(){
+    const logs = await getPointLogs(300);
+    const wrap = document.getElementById("logsWrap");
+    if(!logs.length){ wrap.innerHTML = '<div class="loading">로그가 없습니다.</div>'; return; }
+
+    const emailMap = {};
+    allProfiles.forEach(p => emailMap[p.id] = p.email || p.nickname || p.id);
+    if(!allProfiles.length){
+      const list = await adminListProfiles();
+      allProfiles = list;
+      list.forEach(p => emailMap[p.id] = p.email || p.nickname || p.id);
+    }
+
+    let html = '<table><thead><tr><th>일시</th><th>회원</th><th>변동</th><th>사유</th><th>메모</th></tr></thead><tbody>';
+    logs.forEach(log=>{
+      const sign = log.delta > 0 ? '+' : '';
+      const color = log.delta > 0 ? 'var(--ok)' : 'var(--error)';
+      html += `<tr>
+        <td>${fmtDate(log.created_at)}</td>
+        <td>${emailMap[log.user_id] || log.user_id}</td>
+        <td style="color:${color};font-weight:700;">${sign}${log.delta}</td>
+        <td>${log.reason || ''}</td>
+        <td>${log.note || ''}</td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    wrap.innerHTML = html;
+  }
+
+  /* ---------------- 표지 스타일 ---------------- */
+  async function loadStyles(){
+    const styles = await getCoverStyles();
+    const wrap = document.getElementById("stylesWrap");
+    if(!styles.length){ wrap.innerHTML = '<div class="loading">등록된 스타일이 없습니다.</div>'; return; }
+    wrap.innerHTML = styles.map(s => `
+      <div class="style-card">
+        ${s.is_default ? '<div class="default-tag">기본 스타일</div>' : ''}
+        <img src="${getCoverImageUrl(s.image_path)}" alt="${s.name}">
+        <div class="name">${s.name}</div>
+        <div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap;">
+          ${!s.is_default ? `<button class="btn-sm primary" onclick="handleSetDefaultStyle('${s.id}')">기본으로</button>` : ''}
+          <button class="btn-sm danger" onclick="handleDeleteStyle('${s.id}')">삭제</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  async function handleAddStyle(){
+    const name = document.getElementById("newStyleName").value.trim();
+    const file = document.getElementById("newStyleFile").files[0];
+    const x = parseFloat(document.getElementById("newStyleX").value);
+    const y = parseFloat(document.getElementById("newStyleY").value);
+    if(!name || !file){ alert("이름과 이미지를 모두 입력하세요."); return; }
+    const result = await createCoverStyle(name, file, x, y);
+    if(!result.ok){ alert("업로드 실패: " + result.message); return; }
+    document.getElementById("newStyleName").value = "";
+    document.getElementById("newStyleFile").value = "";
+    await loadStyles();
+  }
+
+  async function handleSetDefaultStyle(id){
+    const result = await setDefaultCoverStyle(id);
+    if(!result.ok){ alert("설정 실패: " + result.message); return; }
+    await loadStyles();
+  }
+
+  async function handleDeleteStyle(id){
+    if(!confirm("이 스타일을 삭제하시겠습니까?")) return;
+    const result = await deleteCoverStyle(id);
+    if(!result.ok){ alert("삭제 실패: " + result.message); return; }
+    await loadStyles();
+  }
+
+  /* ---------------- 초기 로드 ---------------- */
+  async function handleLogout(){ await logout(); }
 
   (async ()=>{
-    const session = await requireLogin();
-    if(!session) return;
-    const profile = await getMyProfile();
-    if(!profile || profile.role !== 'admin'){
-      alert("관리자만 접근할 수 있습니다.");
-      window.location.href = "dashboard.html";
-      return;
-    }
-    await loadAndRender();
+    const profile = await requireAdmin();
+    if(!profile) return;
+    await loadMembers();
+    await loadRules();
+    await loadCosts();
+    await loadStyles();
   })();
+
+  // 포인트 로그는 탭을 처음 열 때 불러온다 (초기 로딩 부담을 줄이기 위함)
+  document.querySelector('.tab[data-panel="p-logs"]').addEventListener('click', () => { loadLogs(); }, { once:true });
 </script>
 </body>
 </html>
