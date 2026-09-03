@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>병력정리 자동 매칭</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.min.js"></script>
+<style>
+:root{
+  --ink:#132a4c;
+  --ink-soft:#5b6b7c;
+  --paper:#f5f7fb;
+  --panel:#ffffff;
+  --line:#dfe5ec;
+  --amber:#16305c;
+  --amber-deep:#0a1a30;
+  --green:#c6efce;
+  --green-line:#7fbf8f;
+  --pink:#ffc0cb;
+  --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:-apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", sans-serif;line-height:1.5;}
+.wrap{max-width:1080px;margin:0 auto;padding:36px 24px 80px;}
+.chart-header{display:flex; align-items:flex-end; gap:10px; margin-bottom:28px;}
+.tab{padding:9px 16px 8px;border-radius:8px 8px 0 0;font-size:12px;letter-spacing:.03em;font-weight:600;color:#fff;}
+.tab.t1{background:var(--ink);}
+.tab.t2{background:var(--amber);}
+.tab.t3{background:var(--green-line);}
+h1{font-size:26px; margin:0 0 6px; letter-spacing:-0.01em; font-weight:800;}
+.sub{color:var(--ink-soft); font-size:14px; margin:0;}
+.privacy{display:inline-flex; align-items:center; gap:6px;margin-top:14px; padding:7px 12px;background:#eef4ee; border:1px solid #cfe3cf; border-radius:20px;font-size:12.5px; color:#2f5c3f;}
+.privacy::before{content:"●"; color:#4c9a63; font-size:8px;}
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:28px 0 20px;}
+@media (max-width:640px){ .grid2{grid-template-columns:1fr;} }
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;}
+.card h3{margin:0 0 4px; font-size:14.5px; display:flex; align-items:center; gap:8px;}
+.card h3 .n{width:20px;height:20px;border-radius:50%;background:var(--ink);color:#fff;font-size:11px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;}
+.card p.desc{margin:0 0 12px; font-size:12.5px; color:var(--ink-soft);}
+.drop{display:block;border:1.5px dashed #c9c1ad;border-radius:10px;padding:22px 14px;text-align:center;cursor:pointer;transition:.15s;background:#fbfaf6;}
+.drop:hover, .drop.drag{border-color:var(--amber); background:#eef2f8;}
+.drop input{display:none;}
+.drop .hint{font-size:12px; color:#9a927e; margin-top:4px;}
+.drop .icon{font-size:20px; margin-bottom:4px;}
+.filename{margin-top:10px; font-size:12.5px; font-family:var(--mono);background:#f1efe6; border-radius:6px; padding:7px 9px;display:none; word-break:break-all;}
+.filename.show{display:block;}
+.run-row{display:flex; align-items:center; gap:14px; margin:24px 0;}
+button.primary{background:var(--amber); color:#fff; border:none;padding:13px 26px; border-radius:9px; font-size:14.5px; font-weight:700;cursor:pointer; transition:.15s;}
+button.primary:hover:not(:disabled){background:var(--amber-deep);}
+button.primary:disabled{background:#d8d2c2; cursor:not-allowed;}
+button.ghost{background:transparent; border:1px solid var(--line); color:var(--ink-soft);padding:12px 18px; border-radius:9px; font-size:13px; cursor:pointer;}
+button.ghost:hover{border-color:var(--ink-soft); color:var(--ink);}
+.status{font-size:13px; color:var(--ink-soft);}
+.status.err{color:#b5453a;}
+.status.ok{color:#2f7d4d;}
+.results{display:none;}
+.results.show{display:block;}
+.tabbar{display:flex; gap:6px; border-bottom:1px solid var(--line); margin:8px 0 0;}
+.tabbtn{padding:10px 16px; font-size:13px; font-weight:600; color:var(--ink-soft);background:none; border:none; cursor:pointer; border-bottom:2px solid transparent;margin-bottom:-1px;}
+.tabbtn.active{color:var(--ink); border-color:var(--amber);}
+.panel{display:none; padding:18px 0;}
+.panel.active{display:block;}
+.tablewrap{overflow:auto; max-height:520px; border:1px solid var(--line); border-radius:10px; background:#fff;}
+table.result{border-collapse:collapse; width:100%; font-size:12px; font-family:var(--mono);}
+table.result th{position:sticky; top:0; background:#f2f2f2; border:1px solid #ddd;padding:8px 6px; font-weight:700; white-space:nowrap;}
+table.result td{border:1px solid #e6e6e6; padding:6px; text-align:center; vertical-align:middle;}
+tr.hosp td{background:var(--green);}
+td.surg-hit{background:var(--pink);}
+.legend{display:flex; gap:18px; font-size:12px; color:var(--ink-soft); margin:10px 0;}
+.legend span{display:inline-flex; align-items:center; gap:6px;}
+.swatch{width:12px;height:12px;border-radius:3px; display:inline-block;}
+.textbox{white-space:pre-wrap; background:#fff; border:1px solid var(--line); border-radius:10px;padding:18px; font-size:13px; max-height:520px; overflow:auto; font-family:var(--mono); line-height:1.6;}
+.copy-row{display:flex; align-items:center; gap:10px; margin-bottom:10px;}
+button.copybtn.copied{background:#dff0d8; border-color:#b9dcae; color:#2f7d4d;}
+.copied-msg{font-size:12.5px; color:#2f7d4d; font-weight:600; opacity:0; transition:opacity .15s;}
+.copied-msg.show{opacity:1;}
+.dl-row{display:flex; align-items:center; gap:12px; margin-top:18px;}
+.meta{font-size:12px; color:var(--ink-soft); margin-top:6px;}
+.note{font-size:12px; color:#9a927e; margin-top:24px; line-height:1.7;}
+.section-divider{display:flex; align-items:center; gap:12px; margin:44px 0 18px;}
+.section-divider .num{width:26px;height:26px;border-radius:50%;background:var(--ink);color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.section-divider h2{font-size:17px; margin:0;}
+.section-divider .line{flex:1; height:1px; background:var(--line);}
+.pdf-card{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:20px;}
+.filelist{margin-top:10px; display:flex; flex-direction:column; gap:6px;}
+.filelist .fitem{font-size:12.5px; font-family:var(--mono); background:#f1efe6; border-radius:6px;padding:7px 9px; display:flex; justify-content:space-between; align-items:center; gap:8px;}
+.filelist .fitem button{background:none;border:none;color:#b5453a;cursor:pointer;font-size:12px;padding:0 4px;}
+.use-row{display:flex; gap:10px; flex-wrap:wrap; margin-top:14px;}
+button.secondary{background:#eef4ee; color:#2f5c3f; border:1px solid #cfe3cf;padding:10px 16px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer;}
+button.secondary:hover{background:#e2eee2;}
+.used-badge{display:none; margin-top:8px; font-size:12px; color:#2f5c3f; background:#eef4ee;border:1px solid #cfe3cf; border-radius:6px; padding:6px 10px;}
+.used-badge.show{display:block;}
+</style>
+</head>
+<body>
+<div class="navbar">
+<a href="dashboard.html" class="brand">With <span>Partners</span></a>
+<nav><a href="profile.html">프로필</a><a href="dashboard.html">대시보드</a><a href="#" id="logoutLink">로그아웃</a></nav>
+</div>
+<div class="wrap">
+  <div class="chart-header">
+    <div class="tab t1">기본진료정보</div>
+    <div class="tab t2">세부진료정보</div>
+    <div class="tab t3">병력정리</div>
+  </div>
+  <h1>병력정리 자동 매칭</h1>
+  <p class="sub">기본진료정보 + 세부진료정보 엑셀 업로드 → 매칭·정렬·하이라이트 → 병력정리 / 병력정리텍스트 자동 생성</p>
+  <div class="privacy">업로드한 파일은 서버로 전송되지 않고 이 브라우저 안에서만 처리됩니다</div>
+  <div class="pdf-card" style="margin-bottom:22px;">
+    <p class="desc" style="margin:0;">📑 <strong>기본진료정보 / 세부진료정보</strong> 칸에 엑셀(.xlsx/.xlsm) 또는 PDF를 그대로 올리세요. PDF는 자동으로 표를 인식해 변환한 뒤 바로 매칭에 사용합니다. 여러 페이지짜리 PDF도 한 파일로 이어 붙여 처리합니다.</p>
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <h3><span class="n">1</span> 기본진료정보 파일</h3>
+      <p class="desc">순번·진료시작일·병의원·진단과·입원외래·주상병코드 등이 담긴 원본 자료</p>
+      <label class="drop" id="drop1">
+        <input type="file" id="file1" accept=".xlsx,.xls,.xlsm,.pdf">
+        <div class="icon">📄</div>
+        <div>클릭 또는 파일을 끌어다 놓으세요</div>
+        <div class="hint">.xlsx / .xlsm / .pdf</div>
+      </label>
+      <div class="filename" id="fname1"></div>
+    </div>
+    <div class="card">
+      <h3><span class="n">2</span> 세부진료정보 파일</h3>
+      <p class="desc">날짜별 처방·수술 상세 내역이 담긴 원본 자료</p>
+      <label class="drop" id="drop2">
+        <input type="file" id="file2" accept=".xlsx,.xls,.xlsm,.pdf">
+        <div class="icon">📄</div>
+        <div>클릭 또는 파일을 끌어다 놓으세요</div>
+        <div class="hint">.xlsx / .xlsm / .pdf</div>
+      </label>
+      <div class="filename" id="fname2"></div>
+    </div>
+  </div>
+  <div class="run-row">
+    <button class="primary" id="runBtn" disabled>매칭 실행</button>
+    <button class="ghost" id="resetBtn">초기화</button>
+    <span class="status" id="status"></span>
+  </div>
+  <div class="results" id="results">
+    <div class="tabbar">
+      <button class="tabbtn active" data-panel="p-table">병력정리 표</button>
+      <button class="tabbtn" data-panel="p-a">간편 고지사항</button>
+      <button class="tabbtn" data-panel="p-b">표준체 고지사항</button>
+      <button class="tabbtn" data-panel="p-c">5년내 중대질환</button>
+    </div>
+    <div class="panel active" id="p-table">
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--green)"></i> 입원 행</span>
+        <span><i class="swatch" style="background:var(--pink)"></i> 수술내역 있음</span>
+      </div>
+      <div class="tablewrap"><table class="result" id="resultTable"></table></div>
+      <div class="meta" id="rowMeta"></div>
+    </div>
+    <div class="panel" id="p-a">
+      <div class="copy-row"><button class="secondary copybtn" id="copyBtnA" type="button">📋 간편 고지사항 복사</button><span class="copied-msg" id="copyMsgA"></span></div>
+      <div class="textbox" id="textA"></div>
+    </div>
+    <div class="panel" id="p-b">
+      <div class="copy-row"><button class="secondary copybtn" id="copyBtnB" type="button">📋 표준체 고지사항 복사</button><span class="copied-msg" id="copyMsgB"></span></div>
+      <div class="textbox" id="textB"></div>
+    </div>
+    <div class="panel" id="p-c">
+      <div class="copy-row"><button class="secondary copybtn" id="copyBtnC" type="button">📋 5년내 중대질환 복사</button><span class="copied-msg" id="copyMsgC"></span></div>
+      <div class="textbox" id="textC"></div>
+    </div>
+    <div class="dl-row">
+      <button class="primary" id="dlBtn">엑셀 파일 다운로드 (.xlsx)</button>
+      <span class="status" id="dlStatus"></span>
+    </div>
+  </div>
+  <div class="note" id="footNote"></div>
+</div>
+<script src="assets/supabase-client.js"></script>
+<script>
+// ⚠️ 테스트용 임시 스위치: true로 두면 포인트 차감 없이(포인트가 있다고 가정하고) 무제한으로
+// 매칭을 실행할 수 있다. 실제 서비스에서는 반드시 false로 두어야 정상적으로 포인트가
+// 차감된다. (5년내 중대질환 기능 테스트 완료 후 false로 되돌림)
+const TESTING_BYPASS_POINTS = false;
+
+let myProfile = null;
+  let freeUnlimited = false;
+  let historyCost = 1000; // 1회 매칭 실행당 차감 포인트. 관리자가 admin.html에서 수정 가능(로그인 시 최신값으로 갱신됨)
+  (async ()=>{
+      if(TESTING_BYPASS_POINTS){
+        // 테스트 모드: 로그인/포인트 확인(assets/supabase-client.js 필요)을 아예 거치지
+        // 않는다 -- 그래서 history.html 파일 하나만 로컬로 열어서 테스트해도 동작한다.
+        freeUnlimited = true;
+        return;
+      }
+      await requireLogin();
+      myProfile = await getMyProfile();
+      freeUnlimited = !!myProfile && (myProfile.role === 'admin' || myProfile.role === 'gold');
+      if(!freeUnlimited){
+        const costs = await getPointCosts(); // 관리자가 admin.html에서 수정한 최신 차감 포인트를 읽어온다
+        historyCost = costs.history;
+      }
+  })();
+document.getElementById("logoutLink").addEventListener("click", async (e)=>{
+  e.preventDefault();
+  if(TESTING_BYPASS_POINTS || typeof logout !== "function"){
+    window.location.href = "login.html";
+    return;
+  }
+  await logout();
+});
+</script>
+<script>
+const EXCLUDE_LIST = ["수술팩","구강내소염수술","발치,치근, 치조골성형술 등","결막결석제거술","결막이물제거술","안저 광응고술",
+"치관확장술[1치당](치은 절제술)","치주소파술","악관절탈구비관혈적정복","후두소작술","치석제거","치주소파술 후","치은신부착술",
+"교합조정술","치은절제술","세포질내","첩모발거술","자궁경부(질)약물소작술","비인강소작","발치술[1치당]-","치근활택술",
+"수술후처치[1일당]-단순 처치","화술 실시"];
+const HEADERS_FIXED = ["순번","진료시작일","병·의원&약국","진단과","입원/외래","주상병코드","주상병명","내원일수","내가 낸 의료비(진료비)","내복약일수","수술내역"];
+let file1=null, file2=null;
+let lastResult=null;
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.worker.min.js";
+const REF_WIDTH = 595.28;
+const WORD_GAP = 3.0;
+const LINE_TOL = 1.5;
+// anchors: 열 "중심" 추정 좌표(예전 방식, 지금은 자동 서식 인식 실패 시 대비용으로만 사용).
+// borders: 실제 PDF 안에 그려진 표 경계선(테두리)의 진짜 x좌표 — pdfplumber로 원본 PDF의
+// 벡터 선(page.lines)을 직접 읽어서 확인한 값이라 앵커 추정보다 훨씬 정확하다. 열이 N개면
+// 경계선은 N+1개(맨 왼쪽 끝~맨 오른쪽 끝 포함).
+const PDF_TEMPLATES = {
+  base:   { marker: "주상병명", anchors: [36.6, 55.6, 119.1, 181.4, 217.7, 242.9, 283.8, 337.0, 374.2, 449.6, 516.2],
+            borders: [28.4, 51.0, 116.2, 178.6, 212.6, 241.8, 282.3, 326.0, 354.3, 433.7, 498.9, 566.9] },
+  detail: { marker: "코드명",   anchors: [36.6, 64.5, 145.5, 249.9, 356.0, 456.3, 499.6, 542.4],
+            borders: [28.4, 56.7, 127.6, 226.8, 333.1, 439.4, 481.9, 524.4, 566.9] }
+};
+async function extractPdfPages(file){
+  const buf = await file.arrayBuffer();
+  const doc = await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise;
+  const pages = [];
+  for(let p=1;p<=doc.numPages;p++){
+    const page = await doc.getPage(p);
+    const viewport = page.getViewport({scale:1});
+    const content = await page.getTextContent();
+    const items = content.items.map(it=>{
+      const x0 = it.transform[4], y = it.transform[5];
+      return { x0, top: viewport.height - y, text: it.str, width: it.width||0 };
+    });
+    pages.push({ items, width: viewport.width, height: viewport.height });
+  }
+  return pages;
+}
+// 글자의 "중심 x좌표"가 실제 표 경계선(borders) 중 어느 두 선 사이에 있는지로 열을 정한다.
+// 좌표 임계값(간격)으로 추측하는 것보다, PDF에 실제로 그려진 선을 기준으로 하는 게 훨씬 정확하다.
+function colOfX(x0, width, borders){
+  const cx = x0 + (width||0)/2;
+  for(let i=0;i<borders.length-1;i++){ if(cx >= borders[i] && cx < borders[i+1]) return i; }
+  if(cx < borders[0]) return 0;
+  return borders.length-2;
+}
+// 좌표(간격)만 보고 병합한다. borders(실제 표 경계선 x좌표)가 주어지면, 간격 조건을 만족해도
+// 두 글자가 서로 다른 칸(경계선 건너편)에 있으면 절대 하나로 합치지 않는다 — 이렇게 하면
+// "병원명과 바로 다음 칸 내용이 원본 PDF 텍스트 안에서부터 붙어있는" 근본 원인 자체를 막을 수 있다.
+// borders가 없으면(서식을 아직 모르는 자동 판별 단계) 기존처럼 간격 기준으로만 병합한다.
+function mergeWordsPdf(chars, scale, borders){
+  chars = chars.slice().sort((a,b)=> a.top-b.top || a.x0-b.x0);
+  const sb = borders ? borders.map(b=>b*scale) : null;
+  const words = []; let cur=null;
+  for(const c of chars){
+    if(c.text.trim().length===0){
+      if(cur){ words.push(cur); cur=null; }
+      continue;
+    }
+    const ccol = sb ? colOfX(c.x0, c.width, sb) : null;
+    if(cur && Math.abs(c.top-cur.top) < LINE_TOL*scale && (c.x0-cur.endX) <= WORD_GAP*scale && (!sb || ccol===cur.col)){
+      cur.text += c.text; cur.endX = c.x0+c.width;
+    } else { if(cur) words.push(cur); cur = {text:c.text, x0:c.x0, top:c.top, endX:c.x0+c.width, col:ccol}; }
+  }
+  if(cur) words.push(cur);
+  return words;
+}
+function nearestColPdf(x0, anchors){
+  let best=0, bd=Infinity;
+  for(let i=0;i<anchors.length;i++){ const d=Math.abs(x0-anchors[i]); if(d<bd){bd=d; best=i;} }
+  return best;
+}
+function detectColumnsDynamic(perPageWords){
+  const allWordsFlat = perPageWords.flat();
+  const digitWords = allWordsFlat.filter(w=>/^[0-9]{1,4}$/.test(w.text));
+  const dxs = digitWords.map(w=>w.x0).sort((a,b)=>a-b);
+  const dclusters=[]; let dcur=null;
+  for(const x of dxs){
+    if(dcur && x-dcur.max<=8){ dcur.max=x; }
+    else { if(dcur) dclusters.push(dcur); dcur={min:x,max:x}; }
+  }
+  if(dcur) dclusters.push(dcur);
+  dclusters.sort((a,b)=>a.min-b.min);
+  const col0 = dclusters[0];
+  if(!col0) return null;
+  const others = allWordsFlat.filter(w=> !(w.x0>=col0.min-3 && w.x0<=col0.max+3)).map(w=>w.x0).sort((a,b)=>a-b);
+  const clusters=[]; let cur=null;
+  for(const x of others){
+    if(cur && x-cur.max<=10){ cur.max=x; cur.xs.push(x); }
+    else { if(cur) clusters.push(cur); cur={min:x,max:x,xs:[x]}; }
+  }
+  if(cur) clusters.push(cur);
+  const totalWords = allWordsFlat.length;
+  const kept = clusters.filter(c=>c.xs.length >= Math.max(20, totalWords*0.02));
+  const allClusters = [{xs:digitWords.map(w=>w.x0)}, ...kept].sort((a,b)=>a.xs[0]-b.xs[0]);
+  return allClusters.map(c=> c.xs.reduce((a,b)=>a+b,0)/c.xs.length);
+}
+/* 열별로 "이 열엔 숫자만 들어와야 한다"는 규칙. 조건에 안 맞는 조각(글자)이 배정되면
+   앞 열(왼쪽, 보통 텍스트 열)로 되돌려 붙여서 진단명 등이 옆 칸으로 새는 걸 막는다. */
+const NUMERIC_ONLY_COLS = { base: [7], detail: [5] }; // base: 7번(H)=내원일수 / detail: 5번(F)=1회 투약량
+/* 반대로 "이 열엔 코드(영문+숫자)만 들어와야 한다"는 규칙. 한글이 섞여 배정되면
+   오른쪽(보통 진단명 등 텍스트 열)으로 돌려보내서 코드 뒤에 글자가 붙는 걸 막는다. */
+const CODE_ONLY_COLS = { base: [5], detail: [] }; // base: 5번(F)=주상병코드
+/* 위 두 보정은 "데이터 행"에만 적용해야 한다 — 헤더 라벨("내원일수" 등)은 원래 텍스트라
+   그대로 적용하면 헤더 자체가 옆 칸으로 밀려버리는 부작용이 생긴다. */
+function correctBodyCol(col, text, numericOnlyCols, codeOnlyCols, NCOLS){
+  const t = text.trim();
+  if(numericOnlyCols.includes(col) && !/^[0-9]+(\.[0-9]+)?$/.test(t)){
+    return Math.max(0, col-1);
+  }
+  if(codeOnlyCols.includes(col) && /[가-힣]/.test(t)){
+    return Math.min(NCOLS-1, col+1);
+  }
+  // 반대 방향: 코드 전용 칸(F) 바로 오른쪽 칸(G, 진단명)에 한글이 전혀 없는 순수 코드
+  // 형태(영문으로 시작 + 영문/숫자만)가 배정되면 원래 코드 칸으로 되돌린다.
+  // 진단명은 항상 한글이 섞여 있으므로 이 기준으로 구분해도 안전하다.
+  if(codeOnlyCols.includes(col-1) && /^[A-Za-z][A-Za-z0-9]*$/.test(t)){
+    return col-1;
+  }
+  return col;
+}
+
+/* ===== 실제 PDF를 직접 분석해서 찾아낸 진짜 원인에 대한 보정 =====
+   기본진료정보 서식에서 "입원"/"외래" 글자와 바로 뒤 주상병코드가 PDF 안에서부터
+   이미 하나의 텍스트로 합쳐져 있는 경우가 있다(예: "외래AL0291", "입원AH8138").
+   이건 좌표 병합 이전에 원본 PDF 자체에 그렇게 저장돼 있어서 좌표 임계값을 조정해도
+   못 잡는다 — 대신 "입원/외래는 이 두 값만 가능하다"는 걸 알고 있으므로, 행을 최종
+   조립한 뒤 텍스트 패턴으로 정확히 분리한다. */
+// col2(병·의원&약국) 안에 진료내역 글자가 섞여 들어오는 두 가지 패턴을 모두 처리한다.
+//  A) 같은 줄에서 바로 붙어버린 경우: "서울특별시보라매병원검사료/자체검사(양방)"
+//     → 기관명 접미사(의원/병원/약국 등)가 나오는 지점까지만 기관명으로 자른다.
+//  B) 기관명이 칸 너비 때문에 줄바꿈되면서 마지막 한두 글자가 그 줄의 맨 끝(다른 칸 내용 뒤)으로
+//     밀려난 경우: "한림대학교강남성심병진찰료/응급...관리료-1 원" (마지막 글자 "원"이 문장 맨 끝에 떨어져 있음)
+//     → 문장 맨 끝의 짧은 토큰을 기관명 접미사를 완성하는 조각으로 되돌려 붙인다.
+function fixDetailInstitution(raw2){
+  const s = String(raw2||"");
+  const SUFFIXES = ["한의원","병원","약국","클리닉","센터","의원"];
+  for(const suf of SUFFIXES){
+    const idx = s.indexOf(suf);
+    if(idx>=0 && idx+suf.length < s.length){
+      return { inst: s.slice(0, idx+suf.length), rest: s.slice(idx+suf.length) };
+    }
+  }
+  const tailM = s.match(/^(.*)\s([가-힣]{1,3})$/);
+  if(tailM){
+    const body = tailM[1], tail = tailM[2];
+    for(const suf of SUFFIXES){
+      if(tail.length >= suf.length) continue;
+      const head = suf.slice(0, suf.length - tail.length);
+      const idx = body.indexOf(head);
+      if(idx>=0 && body.slice(idx, idx+head.length)+tail === suf){
+        return { inst: body.slice(0, idx+head.length)+tail, rest: body.slice(idx+head.length) };
+      }
+    }
+  }
+  return null;
+}
+function correctRowValues(rowVals, templateKey){
+  const v = rowVals.slice();
+  // col0(순번): 페이지 맨 아래 각주("· 본 자료는 ...")가 그 페이지 마지막 행의 순번 칸에
+  // 붙어버리는 경우가 있다 — 순번은 항상 순수 숫자이므로 맨 앞 숫자만 남기고 나머지는 버린다.
+  const m0 = String(v[0]||"").match(/^([0-9]+)/);
+  if(m0) v[0] = m0[1];
+  if(templateKey === "detail"){
+    const fixed = fixDetailInstitution(v[2]);
+    if(fixed){
+      v[2] = fixed.inst;
+      v[3] = fixed.rest + String(v[3]||"");
+    }
+    // 병원명 칸이 셀 너비 때문에 물리적으로 두 줄로 나뉘어 있다가 다시 합쳐질 때, 줄 사이에
+    // 없어야 할 공백이 하나 끼는 경우가 있다(예: "한림대학교 강남성심병원"). 병원명에는 원래
+    // 띄어쓰기가 없으므로 공백을 전부 제거해서 원래 이름 그대로 복원한다.
+    v[2] = String(v[2]||"").replace(/\s+/g,"");
+    return v;
+  }
+  if(templateKey !== "base") return v;
+  // col2(병·의원&약국) · col3(진단과)도 위와 같은 이유(줄바꿈)로 낀 공백을 제거한다 —
+  // 병원명과 마찬가지로 진료과목명(정형외과, 응급의학과 등)도 원래 띄어쓰기가 없는 한 단어다.
+  v[2] = String(v[2]||"").replace(/\s+/g,"");
+  v[3] = String(v[3]||"").replace(/\s+/g,"");
+  // col4(입원/외래) · col5(주상병코드) · col6(주상병명)은 PDF 자체의 텍스트 조각 병합 순서에 따라
+  // 코드가 진단명 "한가운데"에 끼어들거나(예: "기 AH8138타 말초성 현기증") 입원/외래에 들러붙는 등
+  // 다양한 형태로 섞여 들어온다 — 앞쪽만 보는 방식으로는 부족해서, 세 칸을 통째로 합친 뒤
+  // "입원/외래"와 "코드 패턴"을 어디 붙어있든 찾아서 뽑아내고 남은 텍스트를 진단명으로 재구성한다.
+  let combined = [v[4], v[5], v[6]].map(x=>String(x||"")).join("");
+  let admitType = "";
+  combined = combined.replace(/(입원|외래)/, (m)=>{ admitType = m; return ""; });
+  let code = "";
+  combined = combined.replace(/(\$|[A-Za-z]{1,3}[0-9]{2,6})/, (m)=>{ code = m; return ""; });
+  v[4] = admitType;
+  v[5] = code;
+  v[6] = combined.replace(/\s+/g," ").trim();
+  return v;
+}
+
+function processPdfPages(pages){
+  const scale = pages[0].width / REF_WIDTH;
+  // 1단계: 서식(기본/세부)이 뭔지 아직 모르니, 일단 좌표 간격만으로 대충 병합해서 마커 텍스트를 찾는다.
+  const roughPerPageWords = pages.map(p=>{
+    const filtered = p.items.filter(it=> it.top>90*scale && it.top<p.height-70*scale);
+    return mergeWordsPdf(filtered, scale);
+  });
+  // 폰트 간격이 불규칙한 PDF는 "주상병명"처럼 붙어있어야 할 글자 사이에 공백이 끼는 경우가 있어
+  // 공백을 다 제거한 텍스트로도 마커를 한 번 더 확인해서 서식 인식이 불안정해지는 걸 줄인다.
+  const page1Text = roughPerPageWords[0].map(w=>w.text).join(" ");
+  const page1TextNoSpace = page1Text.replace(/\s+/g,"");
+  let anchors, borders, templateKey = "auto";
+  if(page1Text.includes(PDF_TEMPLATES.base.marker) || page1TextNoSpace.includes(PDF_TEMPLATES.base.marker)){
+    anchors = PDF_TEMPLATES.base.anchors.map(a=>a*scale); borders = PDF_TEMPLATES.base.borders; templateKey = "base";
+  } else if(page1Text.includes(PDF_TEMPLATES.detail.marker) || page1TextNoSpace.includes(PDF_TEMPLATES.detail.marker)){
+    anchors = PDF_TEMPLATES.detail.anchors.map(a=>a*scale); borders = PDF_TEMPLATES.detail.borders; templateKey = "detail";
+  } else anchors = detectColumnsDynamic(roughPerPageWords);
+  if(!anchors) return { header: [], rows: [] };
+  const NCOLS = anchors.length;
+  const numericOnlyCols = NUMERIC_ONLY_COLS[templateKey] || [];
+  const codeOnlyCols = CODE_ONLY_COLS[templateKey] || [];
+  // 2단계: 서식을 알아냈고 실제 표 경계선 좌표(borders)도 있으면, 그 선을 기준으로 다시 병합한다 —
+  // 간격만으로는 절대 구분 못 하는 "글자가 원본 PDF 안에서부터 옆 칸과 붙어있는" 경우를,
+  // 실제로 그어진 선을 기준 삼아 원천적으로 막는다. 서식을 못 알아냈으면(자동 인식) 기존처럼
+  // 간격 기준 병합 결과를 그대로 쓴다.
+  const perPageWords = borders
+    ? pages.map(p=>{
+        const filtered = p.items.filter(it=> it.top>90*scale && it.top<p.height-70*scale);
+        return mergeWordsPdf(filtered, scale, borders);
+      })
+    : roughPerPageWords;
+  let headerCols = null;
+  const allRows = [];
+  for(let pageIdx=0; pageIdx<pages.length; pageIdx++){
+    const rawWords = perPageWords[pageIdx].map(w=> ({...w, col: (w.col!=null ? w.col : nearestColPdf(w.x0, anchors))}));
+    const rowAnchorWords = rawWords.filter(w=> w.col===0 && /^[0-9]{1,4}$/.test(w.text));
+    const rowTops = rowAnchorWords.map(w=>w.top).sort((a,b)=>a-b);
+    if(rowTops.length===0) continue;
+    const rowSpacing = rowTops.length>1 ? (rowTops[1]-rowTops[0]) : 50*scale;
+    const headerCutoff = rowTops[0] - rowSpacing/2;
+    if(!headerCols){
+      const headerWords = rawWords.filter(w=> w.top < headerCutoff); // 헤더는 보정 없이 원래 배정 그대로 사용
+      const hBuckets = Array.from({length:NCOLS},()=>[]);
+      headerWords.forEach(w=>hBuckets[w.col].push(w));
+      const hCols = hBuckets.map(list=>{
+        list.sort((a,b)=>a.top-b.top || a.x0-b.x0);
+        return list.map(w=>w.text).join(" ").trim();
+      });
+      if(!hCols.every(h=>!h)) headerCols = hCols;
+    }
+    // 3단계: 실제 데이터 행에만 열 타입 보정(숫자 전용/코드 전용) 적용
+    const bodyWords = rawWords.filter(w=> w.top >= headerCutoff).map(w=>
+      ({...w, col: correctBodyCol(w.col, w.text, numericOnlyCols, codeOnlyCols, NCOLS)})
+    );
+    const pageRows = rowTops.map(()=> Array.from({length:NCOLS}, ()=>[]));
+    for(const w of bodyWords){
+      let bestIdx=0, bd=Infinity;
+      for(let i=0;i<rowTops.length;i++){ const d=Math.abs(rowTops[i]-w.top); if(d<bd){bd=d; bestIdx=i;} }
+      pageRows[bestIdx][w.col].push(w);
+    }
+    for(const rowBuckets of pageRows){
+      let rowVals = rowBuckets.map(list=>{
+        list.sort((a,b)=>a.top-b.top || a.x0-b.x0);
+        return list.map(w=>w.text).join(" ").trim().replace(/\s+/g," ");
+      });
+      rowVals = correctRowValues(rowVals, templateKey);
+      allRows.push(rowVals);
+    }
+  }
+  return { header: headerCols || Array.from({length:NCOLS},(_,i)=>`열${i+1}`), rows: allRows };
+}
+function coerceCell(s){
+  if(s===undefined || s===null || s==="") return null;
+  const t = String(s).trim();
+  if(/^-?[0-9][0-9,]*$/.test(t)) return Number(t.replace(/,/g,""));
+  const dateKey = normalizeDateKey(t);
+  if(dateKey && /^\d{4}-\d{2}-\d{2}$/.test(t)) return toDateObj(t);
+  return t;
+}
+async function loadMatrixFromPdf(file){
+  const pages = await extractPdfPages(file);
+  const res = processPdfPages(pages);
+  if(res.rows.length===0) throw new Error(`"${file.name}"에서 표 데이터를 인식하지 못했습니다. 텍스트 기반 PDF인지 확인해주세요.`);
+  const matrix = [res.header.slice()];
+  res.rows.forEach(r=> matrix.push(r.map(coerceCell)));
+  return matrix;
+}
+async function loadMatrixAuto(file){
+  if(/\.pdf$/i.test(file.name)) return await loadMatrixFromPdf(file);
+  return await loadMatrix(file);
+}
+function pad(n){ return String(n).padStart(2,"0"); }
+function excelSerialToDate(serial){
+  const utc_days = Math.floor(serial - 25569);
+  const utc_value = utc_days*86400;
+  const d = new Date(utc_value*1000);
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
+function normalizeDateKey(v){
+  if(v===null || v===undefined) return "";
+  if(v instanceof Date){ if(isNaN(v)) return ""; return `${v.getUTCFullYear()}-${pad(v.getUTCMonth()+1)}-${pad(v.getUTCDate())}`; }
+  if(typeof v === "number"){ const d = excelSerialToDate(v); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())}`; }
+  const s = String(v).trim();
+  if(!s) return "";
+  const m = s.match(/(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
+  if(m) return `${m[1]}-${pad(m[2])}-${pad(m[3])}`;
+  const d2 = new Date(s);
+  if(!isNaN(d2)) return `${d2.getFullYear()}-${pad(d2.getMonth()+1)}-${pad(d2.getDate())}`;
+  return "";
+}
+function toDateObj(v){
+  if(v instanceof Date) return isNaN(v)?null:v;
+  if(typeof v==="number") return excelSerialToDate(v);
+  const key = normalizeDateKey(v);
+  if(!key) return null;
+  const [y,m,d] = key.split("-").map(Number);
+  return new Date(Date.UTC(y,m-1,d));
+}
+function addDays(d,n){ const r=new Date(d.getTime()); r.setUTCDate(r.getUTCDate()+n); return r; }
+function fmtDate(d){ if(!d) return ""; return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())}`; }
+function maxPrescriptionDays(s){
+  const re = /([0-9]+)\s*일\s*분/g;
+  let m, mx=0;
+  while((m = re.exec(s))){ const n = parseInt(m[1],10); if(n>mx) mx=n; }
+  return mx;
+}
+function stripMedPrefix(s){ return (s||"").replace(/\(양방\)/g,"").replace(/\(한방\)/g,"").trim(); }
+function removeLeadingAlpha(s){
+  s = s||"";
+  if(!s) return s;
+  return /[A-Za-z]/.test(s[0]) ? s.slice(1) : s;
+}
+
+// ===== 5년 이내 중대질환 진단 코드 분류 =====
+// 입원/수술 여부와 무관하게(통원만 있어도) 아래 코드에 해당하는 진단이 5년 이내에
+// 한 번이라도 있으면 고지대상으로 표시한다. 소수점 없이 적은 코드(예: I20, K74)는
+// 그 뒤에 어떤 소수점이 붙어도 모두 매칭되고, 소수점까지 적은 코드(예: D47.1, K70.2)는
+// 그 소수점으로 시작하는 것만 매칭된다.
+const CRITICAL_ILLNESS_CATEGORIES = [
+  { name: "암", codes: "C00-C97, D45, D46, D47.1, D47.3, D47.4, D47.5" },
+  { name: "협심증", codes: "I20" },
+  { name: "심근경색", codes: "I21, I22, I23" },
+  { name: "간경화증", codes: "K70.2, K70.3, K71.7, K74, K76.1" },
+  { name: "심장판막증", codes: "I05, I06, I07, I08, I34, I35, I36, I37, I38, I39, T82.0, T82.6" },
+  { name: "만성콩팥병", codes: "N18, N19" },
+  { name: "특정뇌혈관질환", codes: "I60, I61, I62, I63, I64, I65, I66, I67.1, I67.2" },
+];
+function parseCriticalIllnessRules(codesStr){
+  return (codesStr||"").split(",").map(s=>s.trim().toUpperCase()).filter(Boolean).map(token=>{
+    const rangeMatch = token.match(/^([A-Z])(\d{2})-([A-Z])(\d{2})$/);
+    if(rangeMatch && rangeMatch[1] === rangeMatch[3]){
+      return { type:"range", letter: rangeMatch[1], low: parseInt(rangeMatch[2],10), high: parseInt(rangeMatch[4],10) };
+    }
+    return { type:"prefix", digits: token.replace(/\./g,"") }; // 비교 편의를 위해 소수점을 뗀 형태로 저장
+  });
+}
+const CRITICAL_ILLNESS_RULES = CRITICAL_ILLNESS_CATEGORIES.map(c=>({ name:c.name, rules: parseCriticalIllnessRules(c.codes) }));
+// 진단코드를 "영문 1글자 + 숫자만" 형태로 정규화한다(소수점/공백/기타 기호 제거).
+// 원본 자료에 따라 소수점이 아예 없이 붙어 나오는 경우가 있어, 있으나 없으나 같은
+// 방식으로 비교할 수 있게 통일한다.
+function normalizeIcdDigits(raw){
+  return String(raw||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
+}
+function matchesCriticalIllnessRule(normCode, rule){
+  if(rule.type === "range"){
+    const m = normCode.match(/^([A-Z])(\d{2})/);
+    if(!m || m[1] !== rule.letter) return false;
+    const num = parseInt(m[2],10);
+    return num >= rule.low && num <= rule.high;
+  }
+  return normCode.startsWith(rule.digits);
+}
+// 기본진료정보의 주상병코드(row[5])는 자료 특성상 실제 진단코드 앞에 글자가 하나 더
+// 붙어 나오는 경우가 있다(기존 removeLeadingAlpha가 처리하던 것과 같은 문제). 원본
+// 그대로와 첫 글자를 뗀 버전을 모두 시도해서 어느 한쪽이라도 매칭되면 인정하고,
+// 실제로 매칭에 성공한 쪽의 표기(소수점 포함)를 그대로 화면/엑셀 표시용으로 돌려준다
+// -- 매칭에만 쓰는 정규화 문자열(dot 제거)을 표시용으로 잘못 쓰면 원래 정상적인
+// 코드(예: C50.9)의 첫 글자까지 잘려나가는 문제가 생기기 때문에 분리해서 처리한다.
+function matchCriticalIllnessCategory(rawCode){
+  const raw = String(rawCode||"").trim();
+  const stripped = removeLeadingAlpha(raw).trim();
+  const candidates = [raw];
+  if(stripped && stripped !== raw) candidates.push(stripped);
+  for(const cat of CRITICAL_ILLNESS_RULES){
+    for(const cand of candidates){
+      const normCand = normalizeIcdDigits(cand);
+      if(!normCand) continue;
+      for(const rule of cat.rules){
+        if(matchesCriticalIllnessRule(normCand, rule)) return { category: cat.name, displayCode: cand };
+      }
+    }
+  }
+  return null;
+}
+
+function cellValue(cell){
+  let v = cell.value;
+  if(v && typeof v === "object"){
+    if(v instanceof Date) return v;
+    if("result" in v) return v.result;
+    if("richText" in v) return v.richText.map(t=>t.text).join("");
+    if("text" in v) return v.text;
+  }
+  return v;
+}
+async function loadMatrix(file){
+  const buf = await file.arrayBuffer();
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  const ws = wb.worksheets[0];
+  const maxCol = Math.max(ws.columnCount, ws.actualColumnCount||0, 1);
+  const matrix = [];
+  ws.eachRow({includeEmpty:true}, (row)=>{
+    const arr=[];
+    for(let c=1;c<=maxCol;c++) arr.push(cellValue(row.getCell(c)));
+    matrix.push(arr);
+  });
+  return matrix;
+}
+function processData(baseMatrix, detailMatrix){
+  if(baseMatrix.length < 1) throw new Error("기본진료정보 파일에 데이터가 없습니다.");
+  let lastColBase = 0;
+  const hdr0 = baseMatrix[0]||[];
+  for(let c=hdr0.length-1;c>=0;c--){
+    const v = hdr0[c];
+    if(v!==undefined && v!==null && String(v).trim()!==""){ lastColBase=c+1; break; }
+  }
+  if(lastColBase===0) lastColBase = hdr0.length;
+  if(lastColBase < 3) throw new Error("기본진료정보 파일의 열 구성을 인식하지 못했습니다. 원본 파일 형식을 확인해주세요.");
+  let result = baseMatrix.map(row=>{
+    const r = row.slice(0,lastColBase);
+    while(r.length<lastColBase) r.push(null);
+    return r;
+  });
+  const medDict = new Map();
+  const surgDict = new Map();
+  for(let i=1;i<detailMatrix.length;i++){
+    const row = detailMatrix[i];
+    const key = normalizeDateKey(row[1]);
+    if(!key) continue;
+    const eVal = row[4]!=null ? String(row[4]) : "";
+    if(eVal.includes("내복약")){
+      const x = maxPrescriptionDays(eVal);
+      if(x>0) medDict.set(key, (medDict.get(key)||0)+x);
+    }
+    const dVal = row[3]!=null ? String(row[3]) : "";
+    const eUpper = eVal.toUpperCase();
+    if(dVal.includes("수술") || eUpper.includes("생검용 FORCEPS")){
+      const eTrim = eVal.trim();
+      if(eTrim.length>0 && (eTrim.includes("술") || eTrim.toUpperCase().includes("생검용 FORCEPS")) &&
+         !EXCLUDE_LIST.some(x=>eTrim.includes(x))){
+        surgDict.set(key, surgDict.has(key) ? surgDict.get(key)+", "+eTrim : eTrim);
+      }
+    }
+  }
+  const medCol = lastColBase, surgCol = lastColBase+1;
+  result[0][medCol]="내복약일수"; result[0][surgCol]="수술내역";
+  for(let r=1;r<result.length;r++){
+    const key = normalizeDateKey(result[r][1]);
+    result[r][medCol] = (key && medDict.has(key)) ? medDict.get(key) : null;
+    result[r][surgCol] = (key && surgDict.has(key)) ? surgDict.get(key) : null;
+  }
+  result = result.map(row=>{ const r=row.slice(); if(r.length>8) r.splice(8, Math.min(2, Math.max(0,r.length-8))); return r; });
+  result = result.map(row=>{ const r=row.slice(0,11); while(r.length<11) r.push(null); return r; });
+  result[0] = HEADERS_FIXED.slice();
+  for(let r=result.length-1;r>=1;r--){
+    const row = result[r];
+    const nonEmpty = row.some(v=> v!==null && v!==undefined && String(v).trim()!=="");
+    if(!nonEmpty){ result.splice(r,1); continue; }
+    if(row.some(v=> v!=null && String(v).includes("순번"))){ result.splice(r,1); continue; }
+    const cVal = row[2]!=null?String(row[2]):"";
+    if(cVal.includes("약국") || cVal.includes("약 국")){ result.splice(r,1); continue; }
+  }
+  const head = result[0];
+  const dataRows = result.slice(1);
+  dataRows.sort((a,b)=>{
+    const av = a[6]!=null?String(a[6]):"";
+    const bv = b[6]!=null?String(b[6]):"";
+    return bv.localeCompare(av,"ko");
+  });
+  result = [head, ...dataRows];
+  let textA = "";
+  for(let r=1;r<result.length;r++){
+    const row = result[r];
+    const hasHosp = String(row[4]||"").includes("입원");
+    const hasSurg = String(row[10]||"").trim().length>0;
+    if(!hasHosp && !hasSurg) continue;
+    const dateText = normalizeDateKey(row[1]);
+    const diagName = stripMedPrefix(String(row[6]||""));
+    const codeText = removeLeadingAlpha(String(row[5]||""));
+    const startDate = toDateObj(row[1]);
+    let daysH = 0;
+    const hv = row[7];
+    if(typeof hv==="number") daysH=hv; else if(typeof hv==="string" && /^[0-9]+$/.test(hv.trim())) daysH=parseInt(hv,10);
+    const endDate = (daysH>=1 && startDate) ? addDays(startDate, daysH-1) : startDate;
+    const periodText = startDate ? `${fmtDate(startDate)}~${fmtDate(endDate)}` : "";
+    let treatText="";
+    if(hasHosp) treatText = daysH>0 ? `입원${daysH}일` : "입원";
+    if(hasSurg) treatText = treatText ? treatText+", 수술" : "수술";
+    let surgText = String(row[10]||"").trim(); if(!surgText) surgText="X";
+    textA += `-병력사항-\n날짜 : ${dateText}\n정확한 진단명 : ${diagName}\n진단코드 : ${codeText}\n부위 : \n치료기간 : ${periodText}\n치료내용 : ${treatText}\n수술명 : ${surgText}\nㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ\n`;
+  }
+  const agg = new Map();
+  for(let r=1;r<result.length;r++){
+    const row = result[r];
+    const code = removeLeadingAlpha(String(row[5]||""));
+    if(!code) continue;
+    if(!agg.has(code)){
+      agg.set(code, {visitCnt:0, sumMedDays:0, hasHosp:false, hospDays:0, hasSurg:false, surgSet:new Map(),
+        startDate: toDateObj(row[1]), endDate: toDateObj(row[1]), diag: stripMedPrefix(String(row[6]||""))});
+    }
+    const a = agg.get(code);
+    a.visitCnt++;
+    const d = toDateObj(row[1]);
+    if(d){ if(!a.startDate || d<a.startDate) a.startDate=d; if(!a.endDate || d>a.endDate) a.endDate=d; }
+    const jv = row[9];
+    if(typeof jv==="number") a.sumMedDays+=jv; else if(typeof jv==="string" && /^[0-9]+$/.test(jv.trim())) a.sumMedDays+=parseInt(jv,10);
+    if(String(row[4]||"").includes("입원")){
+      a.hasHosp=true;
+      const hv=row[7];
+      if(typeof hv==="number") a.hospDays+=hv; else if(typeof hv==="string" && /^[0-9]+$/.test(hv.trim())) a.hospDays+=parseInt(hv,10);
+    }
+    const ktxt = String(row[10]||"").trim();
+    if(ktxt){ a.hasSurg=true; if(!a.surgSet.has(ktxt)) a.surgSet.set(ktxt,true); }
+  }
+  let textB = "";
+  for(const [code,a] of agg){
+    if(a.visitCnt>=7 || a.sumMedDays>=30 || a.hasHosp || a.hasSurg){
+      const startS = fmtDate(a.startDate), endS = fmtDate(a.endDate);
+      let treatS="";
+      if(a.hasHosp) treatS = a.hospDays>0 ? `입원${a.hospDays}일` : "입원";
+      if(a.hasSurg) treatS = treatS ? treatS+", 수술" : "수술";
+      if(a.sumMedDays>0) treatS = treatS ? `${treatS}, 약${a.sumMedDays}일` : `약${a.sumMedDays}일`;
+      treatS = treatS ? `${treatS}, 통원 ${a.visitCnt}일` : `통원 ${a.visitCnt}일`;
+      let surgNames = Array.from(a.surgSet.keys()).join(", "); if(!surgNames) surgNames="X";
+      textB += `-병력사항-\n날짜 : ${startS}\n정확한 진단명 : ${a.diag}\n진단코드 : ${code}\n부위 : \n치료기간 : ${startS}~${endS}\n치료내용 : ${treatS}\n수술명 : ${surgNames}\nㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ\n`;
+    }
+  }
+
+  // 5년 이내 중대질환: 입원/수술 여부와 무관하게(통원만 있어도) 진단코드가
+  // CRITICAL_ILLNESS_CATEGORIES에 해당하고, 그 진단일이 오늘로부터 5년 이내인 경우 표시한다.
+  const todayUTC = new Date(); const todayForCritical = new Date(Date.UTC(todayUTC.getUTCFullYear(), todayUTC.getUTCMonth(), todayUTC.getUTCDate()));
+  const aggC = new Map();
+  for(let r=1;r<result.length;r++){
+    const row = result[r];
+    const rawCode = String(row[5]||"");
+    if(!rawCode.trim()) continue;
+    const match = matchCriticalIllnessCategory(rawCode);
+    if(!match) continue;
+    const code = match.displayCode;
+    const catName = match.category;
+    const key = code + "|" + catName;
+    if(!aggC.has(key)){
+      aggC.set(key, { code, category: catName, diag: stripMedPrefix(String(row[6]||"")), visitCnt:0, startDate:null, endDate:null, within5:false });
+    }
+    const c = aggC.get(key);
+    c.visitCnt++;
+    const d = toDateObj(row[1]);
+    if(d){
+      if(!c.startDate || d<c.startDate) c.startDate = d;
+      if(!c.endDate || d>c.endDate) c.endDate = d;
+      const years = (todayForCritical.getTime() - d.getTime()) / (365.25*24*3600*1000);
+      if(d.getTime() <= todayForCritical.getTime() && years <= 5) c.within5 = true;
+    }
+  }
+  let textC = "";
+  for(const [key,c] of aggC){
+    if(!c.within5) continue;
+    const startS = fmtDate(c.startDate), endS = fmtDate(c.endDate);
+    textC += `-병력사항-\n분류 : 5년내 중대질환 (${c.category})\n날짜 : ${startS}\n정확한 진단명 : ${c.diag}\n진단코드 : ${c.code}\n부위 : \n치료기간 : ${startS}~${endS}\n치료내용 : 통원 ${c.visitCnt}일 (입원/수술 여부와 무관하게 5년 이내 진단만으로 고지대상)\n수술명 : X\nㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ\n`;
+  }
+
+  return { matrix: result, textA, textB, textC };
+}
+function displayCell(v){
+  if(v===null || v===undefined) return "";
+  if(v instanceof Date) return normalizeDateKey(v);
+  return String(v);
+}
+function renderTable(matrix){
+  const table = document.getElementById("resultTable");
+  let html = "<thead><tr>" + matrix[0].map(h=>`<th>${displayCell(h)}</th>`).join("") + "</tr></thead><tbody>";
+  const PREVIEW_LIMIT = 300;
+  const rows = matrix.slice(1, 1+PREVIEW_LIMIT);
+  for(const row of rows){
+    const hasHosp = String(row[4]||"").includes("입원");
+    const hasSurg = String(row[10]||"").trim().length>0;
+    html += `<tr class="${hasHosp?"hosp":""}">`;
+    row.forEach((v,ci)=>{
+      const cls = (ci===10 && hasSurg) ? "surg-hit" : "";
+      html += `<td class="${cls}">${displayCell(v)}</td>`;
+    });
+    html += "</tr>";
+  }
+  html += "</tbody>";
+  table.innerHTML = html;
+  const meta = document.getElementById("rowMeta");
+  const total = matrix.length-1;
+  meta.textContent = total > PREVIEW_LIMIT
+    ? `전체 ${total}행 중 상위 ${PREVIEW_LIMIT}행 미리보기 (다운로드 파일에는 전체 포함)`
+    : `총 ${total}행`;
+}
+const EXCEL_CELL_LIMIT = 32000;
+function safeCellText(s){
+  if(!s) return s;
+  if(s.length <= EXCEL_CELL_LIMIT) return s;
+  return s.slice(0, EXCEL_CELL_LIMIT) + `\n\n... (내용이 길어 일부만 표시됩니다. 전체 ${s.length}자 중 ${EXCEL_CELL_LIMIT}자까지 저장됨)`;
+}
+function writeRawSheet(wb, sheetName, rawMatrix){
+  const ws = wb.addWorksheet(sheetName);
+  if(!rawMatrix || rawMatrix.length===0) return ws;
+  const colCount = Math.max(...rawMatrix.map(r=>r.length), 1);
+  rawMatrix.forEach((row, ri)=>{
+    const excelRow = ws.getRow(ri+1);
+    for(let ci=0; ci<colCount; ci++){
+      const v = row[ci];
+      const cell = excelRow.getCell(ci+1);
+      if(v instanceof Date){ cell.value = v; cell.numFmt = "yyyy-mm-dd"; }
+      else if(v!==undefined) cell.value = v;
+    }
+    if(ri===0){ excelRow.eachCell(c=>{ c.font={bold:true}; c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF2F2F2"}}; }); }
+  });
+  for(let ci=1; ci<=colCount; ci++){ ws.getColumn(ci).width = 14; }
+  ws.views = [{ state:"frozen", ySplit:1 }];
+  return ws;
+}
+async function buildWorkbook(matrix, textA, textB, textC, rawBase, rawDetail){
+  const wb = new ExcelJS.Workbook();
+  writeRawSheet(wb, "기본진료정보", rawBase);
+  writeRawSheet(wb, "세부진료정보", rawDetail);
+  const ws = wb.addWorksheet("병력정리");
+  const widths = [6, 12, 16, 10, 10, 11, 20, 9, 13, 6, 30];
+  matrix.forEach((row, ri)=>{
+    const excelRow = ws.getRow(ri+1);
+    row.forEach((v, ci)=>{
+      const cell = excelRow.getCell(ci+1);
+      if(v instanceof Date){ cell.value = v; cell.numFmt = "yyyy-mm-dd"; }
+      else if(v!==undefined) cell.value = v;
+      cell.alignment = { horizontal:"center", vertical:"middle", wrapText:true };
+      cell.border = { top:{style:"thin"}, left:{style:"thin"}, bottom:{style:"thin"}, right:{style:"thin"} };
+    });
+    excelRow.height = ri===0 ? 32 : 16.5;
+    excelRow.commit && excelRow.commit();
+  });
+  widths.forEach((w,i)=>{ ws.getColumn(i+1).width = w; });
+  const headerRow = ws.getRow(1);
+  headerRow.eachCell(c=>{ c.font={bold:true}; c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF2F2F2"}}; });
+  for(let r=1;r<matrix.length;r++){
+    const row = matrix[r];
+    const hasHosp = String(row[4]||"").includes("입원");
+    const hasSurg = String(row[10]||"").trim().length>0;
+    const excelRow = ws.getRow(r+1);
+    if(hasHosp){
+      for(let c=1;c<=10;c++) excelRow.getCell(c).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFC6EFCE"}};
+    }
+    if(hasSurg){
+      excelRow.getCell(11).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFFFC0CB"}};
+    }
+  }
+  ws.views = [{ state:"frozen", ySplit:1 }];
+  const wsTxt = wb.addWorksheet("병력정리텍스트");
+  const a1 = wsTxt.getCell("A1"); a1.value = "간편 고지사항\n▼▼▼▼";
+  const b1 = wsTxt.getCell("B1"); b1.value = "표준체 고지사항\n▼▼▼▼";
+  const c1 = wsTxt.getCell("C1"); c1.value = "5년내 중대질환\n▼▼▼▼";
+  [a1,b1,c1].forEach(c=>{ c.font={bold:true,size:14}; c.alignment={horizontal:"center",vertical:"middle",wrapText:true}; });
+  wsTxt.getRow(1).height = 40;
+  const a2 = wsTxt.getCell("A2"); a2.value = safeCellText(textA); a2.alignment={wrapText:true, vertical:"top"};
+  const b2 = wsTxt.getCell("B2"); b2.value = safeCellText(textB); b2.alignment={wrapText:true, vertical:"top"};
+  const c2 = wsTxt.getCell("C2"); c2.value = safeCellText(textC); c2.alignment={wrapText:true, vertical:"top"};
+  wsTxt.getRow(2).height = 300;
+  wsTxt.getColumn(1).width = 80;
+  wsTxt.getColumn(2).width = 80;
+  wsTxt.getColumn(3).width = 80;
+  return wb;
+}
+function setupDrop(dropId, inputId, fnameId, onSet){
+  const drop = document.getElementById(dropId);
+  const input = document.getElementById(inputId);
+  const fname = document.getElementById(fnameId);
+  input.addEventListener("change", ()=>{
+    if(input.files[0]){ onSet(input.files[0]); fname.textContent="✓ "+input.files[0].name; fname.classList.add("show"); }
+  });
+  drop.addEventListener("dragover", e=>{ e.preventDefault(); drop.classList.add("drag"); });
+  drop.addEventListener("dragleave", ()=> drop.classList.remove("drag"));
+  drop.addEventListener("drop", e=>{
+    e.preventDefault(); drop.classList.remove("drag");
+    const f = e.dataTransfer.files[0];
+    if(f){ input.files = e.dataTransfer.files; onSet(f); fname.textContent="✓ "+f.name; fname.classList.add("show"); }
+  });
+}
+setupDrop("drop1","file1","fname1", f=>{ file1=f; updateRunBtn(); });
+setupDrop("drop2","file2","fname2", f=>{ file2=f; updateRunBtn(); });
+function updateRunBtn(){ document.getElementById("runBtn").disabled = !(file1 && file2); }
+document.getElementById("resetBtn").addEventListener("click", ()=>{
+  file1=null; file2=null;
+  document.getElementById("file1").value="";
+  document.getElementById("file2").value="";
+  document.getElementById("fname1").classList.remove("show");
+  document.getElementById("fname2").classList.remove("show");
+  document.getElementById("results").classList.remove("show");
+  document.getElementById("status").textContent="";
+  document.getElementById("status").className="status";
+  updateRunBtn();
+});
+document.querySelectorAll(".tabbtn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll(".tabbtn").forEach(b=>b.classList.remove("active"));
+    document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById(btn.dataset.panel).classList.add("active");
+  });
+});
+// 클립보드 복사: navigator.clipboard가 막혀있는 환경(구형 브라우저, 비 HTTPS 등)을 대비해
+// 임시 textarea + execCommand("copy")로 되돌아가는 방식도 같이 넣어둔다.
+async function copyPlainText(text){
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    try{ await navigator.clipboard.writeText(text); return true; }catch(e){ /* 아래 폴백으로 진행 */ }
+  }
+  try{
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  }catch(e){ return false; }
+}
+function wireCopyButton(btnId, msgId, getText){
+  const btn = document.getElementById(btnId);
+  const msg = document.getElementById(msgId);
+  btn.addEventListener("click", async ()=>{
+    const text = getText();
+    if(!text){ return; }
+    const ok = await copyPlainText(text);
+    if(ok){
+      btn.classList.add("copied");
+      msg.textContent = "복사됨!";
+      msg.classList.add("show");
+      setTimeout(()=>{ btn.classList.remove("copied"); msg.classList.remove("show"); }, 1800);
+    } else {
+      msg.textContent = "복사 실패 — 직접 선택해서 복사해주세요.";
+      msg.classList.add("show");
+    }
+  });
+}
+wireCopyButton("copyBtnA", "copyMsgA", ()=> document.getElementById("textA").textContent);
+wireCopyButton("copyBtnB", "copyMsgB", ()=> document.getElementById("textB").textContent);
+wireCopyButton("copyBtnC", "copyMsgC", ()=> document.getElementById("textC").textContent);
+document.getElementById("runBtn").addEventListener("click", async ()=>{
+        const status = document.getElementById("status");
+        const runBtn = document.getElementById("runBtn");
+        status.className="status"; status.textContent="처리 중...";
+        document.getElementById("results").classList.remove("show");
+        runBtn.disabled = true;
+        try{
+                  const baseMatrix = await loadMatrixAuto(file1);
+                  const detailMatrix = await loadMatrixAuto(file2);
+                  const { matrix, textA, textB, textC } = processData(baseMatrix, detailMatrix);
+
+                  if(!freeUnlimited){
+                              const ok = await spendPoints('history');
+                              if(!ok){
+                                            status.className="status err";
+                                            status.textContent="포인트 차감에 실패했습니다. 포인트가 부족하거나 승인 상태를 확인해주세요. (결과는 저장되지 않았습니다)";
+                                            return;
+                              }
+                  }
+
+                  lastResult = { matrix, textA, textB, textC, rawBase: baseMatrix, rawDetail: detailMatrix, baseName: file1.name.replace(/\.(xlsx|xlsm|xls)$/i,"") };
+                  renderTable(matrix);
+                  document.getElementById("textA").textContent = textA || "(조건에 해당하는 입원/수술 건이 없습니다)";
+                  document.getElementById("textB").textContent = textB || "(조건에 해당하는 코드가 없습니다)";
+                  document.getElementById("textC").textContent = textC || "(5년 이내 중대질환 진단 코드에 해당하는 건이 없습니다)";
+                  document.getElementById("results").classList.add("show");
+                  status.className="status ok"; status.textContent = `완료 · 총 ${matrix.length-1}행 매칭됨` + (freeUnlimited ? "" : ` (${historyCost.toLocaleString()}P 차감)`);
+        }catch(err){
+                  console.error(err);
+                  status.className="status err"; status.textContent="오류: "+err.message+" (포인트는 차감되지 않았습니다)";
+        } finally {
+                  runBtn.disabled = false;
+        }
+});
+document.getElementById("dlBtn").addEventListener("click", async ()=>{
+  const dlStatus = document.getElementById("dlStatus");
+  if(!lastResult){ return; }
+  dlStatus.textContent="파일 생성 중...";
+  try{
+    const wb = await buildWorkbook(lastResult.matrix, lastResult.textA, lastResult.textB, lastResult.textC, lastResult.rawBase, lastResult.rawDetail);
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${lastResult.baseName} 병력정리.xlsx`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    dlStatus.textContent="다운로드 완료";
+  }catch(err){
+    console.error(err);
+    dlStatus.textContent="다운로드 오류: "+err.message;
+  }
+});
+document.getElementById("footNote").textContent =
+  "※ 기본진료정보 파일은 11개 열(순번~내가 낸 의료비) 구성을 기준으로 처리하며, 그 중 I·J열은 원본 매크로와 동일하게 자동 제외됩니다. " +
+  "엑셀의 텍스트 정렬 방식과 브라우저 정렬 방식에 미세한 차이가 있을 수 있어 \"주상병명\" 정렬 결과가 원본과 완전히 동일하지 않을 수 있습니다.";
+</script>
+</body>
+</html>
