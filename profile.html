@@ -34,6 +34,18 @@
   <div class="profile-grid" id="profileInfo">
     <div class="loading">불러오는 중…</div>
   </div>
+  <div class="pw-row" style="margin-top:14px;">
+    <div class="field" style="margin:0;">
+      <label>이름</label>
+      <input type="text" id="editName" placeholder="이름">
+    </div>
+    <div class="field" style="margin:0;">
+      <label>생년월일</label>
+      <input type="date" id="editBirth">
+    </div>
+    <button type="button" class="btn-ghost" id="saveInfoBtn">저장</button>
+  </div>
+  <div class="msg" id="infoMsg"></div>
 </div>
 
 <div class="auth-card" style="max-width:100%;padding:24px 22px;margin-bottom:24px;">
@@ -85,11 +97,11 @@
     document.getElementById('profileInfo').innerHTML = `
       <div class="profile-item"><div class="lbl">이메일</div><div class="val">${myProfile.email||''}</div></div>
       <div class="profile-item"><div class="lbl">닉네임</div><div class="val">${myProfile.nickname||''}</div></div>
-      <div class="profile-item"><div class="lbl">이름</div><div class="val">${myProfile.name||'-'}</div></div>
-      <div class="profile-item"><div class="lbl">생년월일</div><div class="val">${fmtDate(myProfile.birth)}</div></div>
       <div class="profile-item"><div class="lbl">보유 크레딧</div><div class="val">${(myProfile.points||0).toLocaleString()} 크레딧</div></div>
       <div class="profile-item"><div class="lbl">가입일</div><div class="val">${fmtDate(myProfile.created_at)}</div></div>
     `;
+    document.getElementById('editName').value = myProfile.name || '';
+    document.getElementById('editBirth').value = myProfile.birth || '';
 
     myStyle = await getMyEffectiveCoverStyle(myProfile);
     if(myStyle){
@@ -125,6 +137,16 @@
       msg.textContent = '저장되었습니다.'; msg.className='msg ok show';
     });
   }
+
+  document.getElementById('saveInfoBtn').addEventListener('click', async ()=>{
+    const name = document.getElementById('editName').value.trim();
+    const birth = document.getElementById('editBirth').value || null;
+    const msg = document.getElementById('infoMsg');
+    const { error } = await supabaseClient.from('profiles').update({ name, birth }).eq('id', myProfile.id);
+    if(error){ msg.textContent = '저장 실패: ' + error.message; msg.className = 'msg err show'; return; }
+    myProfile.name = name; myProfile.birth = birth;
+    msg.textContent = '저장되었습니다.'; msg.className = 'msg ok show';
+  });
 
   document.getElementById('changePwBtn').addEventListener('click', async ()=>{
     const pw = document.getElementById('newPassword').value;
