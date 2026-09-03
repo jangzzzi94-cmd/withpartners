@@ -1,0 +1,2332 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>보장분석표 | With Partners</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-client.js"></script>
+<style>
+:root{ --ink:#132a4c; --ink-soft:#5b6b7c; --paper:#f5f7fb; --panel:#fff; --line:#dfe5ec; --amber:#16305c; }
+*{box-sizing:border-box;}
+body{font-family:"Pretendard","Malgun Gothic",sans-serif;background:var(--paper);color:var(--ink);margin:0;padding:24px;}
+h1{font-size:20px;margin:0 0 4px;}
+h2{font-size:16px;margin:0 0 10px;}
+.sub{color:var(--ink-soft);font-size:13px;margin-bottom:20px;}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:20px;}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
+input[type=file]{padding:8px;border:1px dashed var(--line);border-radius:8px;background:#fafbfd;flex:1;min-width:260px;}
+input[type=text],input[type=number],input[type=password]{padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px;}
+button{background:var(--amber);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:13px;cursor:pointer;}
+button:disabled{opacity:.5;cursor:not-allowed;}
+button.secondary{background:#fff;color:var(--amber);border:1px solid var(--amber);}
+button.danger{background:#fff;color:#c0392b;border:1px solid #c0392b;}
+.status{font-size:13px;margin-top:10px;white-space:pre-wrap;}
+.status.err{color:#c0392b;}
+.status.ok{color:#1a7a3c;}
+.log{font-size:12px;color:var(--ink-soft);background:#fafbfd;border:1px solid var(--line);border-radius:8px;padding:10px;max-height:220px;overflow:auto;white-space:pre-wrap;margin-top:10px;}
+table.preview{border-collapse:collapse;width:100%;font-size:12px;margin-top:14px;table-layout:fixed;}
+table.preview th,table.preview td{border:1px solid var(--line);padding:5px 7px;text-align:center;white-space:normal;word-break:break-word;overflow-wrap:break-word;vertical-align:middle;}
+table.preview th{background:#eef2f8;position:sticky;top:0;z-index:2;}
+/* 왼쪽 담보명 열 고정 -- 상품/플랜 열을 아무리 많이 추가해도, 표를 오른쪽으로 스크롤할 때
+   왼쪽의 담보(대분류/항목/합계) 라벨 열은 항상 화면에 그대로 남도록 가로 스크롤에도 고정한다.
+   각 표(보장분석표 전/후/마스터)의 colgroup 프리픽스 너비(60px, 150px, 90px 또는 60px, 170px)에
+   맞춰 누적 left 값을 지정한다. */
+.stick-l0{position:sticky;left:0;z-index:2;}
+.stick-l60{position:sticky;left:60px;z-index:2;}
+.stick-l210{position:sticky;left:210px;z-index:2;}
+/* 세로 고정(top)과 가로 고정(left)이 동시에 걸리는 "모서리" 칸 -- 보장분석표(전)의 헤더 담보
+   라벨 칸들 -- 은 둘 다 겹치는 경우에도 항상 맨 위에 그려지도록 z-index를 한 단계 더 높인다. */
+#previewTable thead .stick-l0,
+#previewTable thead .stick-l60,
+#previewTable thead .stick-l210{z-index:3;}
+table.preview td.label{background:#fafbfd;font-weight:600;}
+table.preview td.grouplabel{background:#eef2f8;font-weight:700;}
+table.preview td.meta-cell.kept-cell{background:#e8c547;}
+table.grid td.meta-cell.kept-cell{background:#e8c547;}
+table.grid td.limit-warn-cell{background:#fdecea;outline:2px solid #e74c3c;outline-offset:-2px;cursor:help;}
+button.keep-btn.active-keep{background:#e8c547;color:#132a4c;border-color:#c9a227;}
+table.grid{border-collapse:collapse;width:100%;font-size:12px;margin-top:10px;table-layout:fixed;}
+table.grid th,table.grid td{border:1px solid var(--line);padding:4px 6px;text-align:center;white-space:normal;word-break:break-word;overflow-wrap:break-word;vertical-align:middle;}
+table.grid th{background:#eef2f8;}
+table.grid td.label{background:#fafbfd;font-weight:600;}
+table.grid td.grouplabel{background:#eef2f8;font-weight:700;}
+/* 모든 칸의 텍스트/입력값은 가운데정렬. 상품명만 여러 줄로 접힐 수 있게 넉넉한 높이의 textarea. */
+table.preview input,table.preview textarea,table.grid input,table.grid textarea{width:100%;text-align:center;font-family:inherit;border:1px solid transparent;background:transparent;padding:2px 3px;border-radius:4px;font-size:12px;resize:vertical;}
+table.preview input:focus,table.preview textarea:focus,table.grid input:focus,table.grid textarea:focus{border-color:var(--amber);background:#fff;outline:none;}
+textarea.pv-meta-input,textarea.af-productname{min-height:56px;line-height:1.4;}
+/* 기타(텍스트 태그) 칸은 기존 대비 2배 높이의 고정 크기 박스로 둔다(자동 늘어남 없음,
+   필요하면 사용자가 직접 세로로 드래그해서 더 늘릴 수 있다 -- resize:vertical). */
+textarea.pv-etc-input,textarea.master-item-input,textarea.af-item{min-height:80px;line-height:1.4;resize:vertical;}
+.scrollwrap{overflow:auto;max-height:70vh;border:1px solid var(--line);border-radius:8px;}
+.badge{display:inline-block;background:#eef2f8;color:var(--ink-soft);border-radius:6px;padding:2px 8px;font-size:11px;margin-left:6px;}
+.col-alias{width:100%;}
+.sheettabs{display:flex;gap:4px;margin-bottom:0;border-bottom:2px solid var(--line);}
+.sheettab{background:#e4e9f1;color:var(--ink-soft);border:1px solid var(--line);border-bottom:none;border-radius:8px 8px 0 0;padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer;}
+.sheettab.active{background:var(--panel);color:var(--ink);position:relative;top:2px;}
+.sheetpanel{background:var(--panel);border:1px solid var(--line);border-top:none;border-radius:0 0 12px 12px;padding:20px;margin-bottom:20px;}
+.sheetpanel .card{border:1px solid var(--line);}
+.summary-premium-row{display:flex;gap:16px;margin-bottom:20px;}
+.summary-premium-box{flex:1;border:1px solid var(--line);border-radius:10px;padding:16px 18px;text-align:center;background:#f8fafc;}
+.summary-premium-box .lbl{font-size:12px;color:var(--ink-soft);margin-bottom:6px;}
+.summary-premium-box .val{font-size:20px;font-weight:800;}
+.summary-premium-box.diff .val.up{color:#c0392b;}
+.summary-premium-box.diff .val.down{color:#1e7e50;}
+.summary-groups{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+@media (max-width:900px){.summary-groups{grid-template-columns:1fr;}}
+.summary-group{border:1px solid var(--line);border-radius:10px;overflow:hidden;}
+.summary-group h3{margin:0;padding:10px 12px;background:var(--ink);color:#fff;font-size:13.5px;text-align:center;}
+table.summary-table{width:100%;border-collapse:collapse;font-size:12.5px;}
+table.summary-table td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:center;}
+table.summary-table td.item{text-align:left;color:var(--ink-soft);}
+table.summary-table thead td{font-weight:700;background:#f2f4f8;color:var(--ink-soft);font-size:11.5px;}
+#diffTable td.diff-up{background:#fdecea;color:#c0392b;font-weight:700;}
+#diffTable td.diff-down{background:#e8f6ee;color:#1e7e50;font-weight:700;}
+#diffTable thead td{font-weight:700;background:var(--ink);color:#fff;}
+#diffTable td{text-align:center;padding:6px 8px;border-bottom:1px solid var(--line);}
+#diffTable td.item{text-align:left;}
+#diffTable td.grouplabel{color:var(--ink-soft);font-size:11.5px;}
+[data-gridrow].range-selected{background:#cfe3ff !important;}
+.undo-delete-btn{white-space:nowrap;}
+#resumeDropZone{transition:border-color .15s,background .15s;}
+#resumeDropZone.drop-hover{border-color:var(--ink);background:#eef2f8;}
+</style>
+</head>
+<body>
+<div class="navbar">
+<a href="dashboard.html" class="brand">With <span>Partners</span></a>
+<nav><a href="profile.html">프로필</a><a href="dashboard.html">대시보드</a><a href="#" id="logoutLink">로그아웃</a></nav>
+</div>
+<div style="max-width:1200px;margin:0 auto;padding:28px 24px 60px;">
+
+<h1>보장분석표</h1>
+<div class="sub">원본 엑셀처럼 아래 탭에서 시트를 골라 볼 수 있습니다: 보장분석표(전) / 보장분석표(후) / 종합비교 / 보장차이 / 마스터.</div>
+
+<div class="sheettabs">
+  <button class="sheettab active" data-sheet="before">보장분석표(전)</button>
+  <button class="sheettab" data-sheet="after">보장분석표(후)</button>
+  <button class="sheettab" data-sheet="summary">종합비교</button>
+  <button class="sheettab" data-sheet="diff">보장차이</button>
+  <button class="sheettab" data-sheet="master">마스터</button>
+</div>
+
+<!-- ============================== 시트: 보장분석표(전) ============================== -->
+<div id="sheet-before" class="sheetpanel">
+  <div class="card">
+    <div class="row">
+      <input type="file" id="fileInput" accept=".pdf,.xlsx,.xlsm">
+      <button id="runBtn" disabled>가져오기 실행</button>
+      <button id="dlBtn" class="secondary" disabled>전체 다운로드 (원본 서식 .xlsx)</button>
+    </div>
+    <div class="status" id="status">파일을 선택하세요. (PDF 또는 .xlsx/.xlsm)</div>
+    <div id="resumeDropZone" class="row" style="margin-top:10px;border:1px dashed var(--line);border-radius:8px;padding:10px 12px;background:#fafbfd;">
+      <input type="file" id="resumeFileInput" accept=".xlsx" style="display:none;">
+      <button type="button" id="resumeUploadBtn" class="secondary">📂 이전 보장분석표 불러오기 (이어서 수정)</button>
+      <div class="status" id="resumeStatus" style="margin:0;">파일을 여기로 끌어다 놓거나 버튼을 눌러 골라주세요. With Partners에서 내려받았던 .xlsx를 텍스트만 고쳐서 다시 올리면, "유지" 표시했던 상품까지 그대로 화면에서 이어서 수정할 수 있습니다.</div>
+    </div>
+  </div>
+
+  <div class="card" id="previewCard" style="display:none;">
+    <div class="row" style="justify-content:space-between;">
+      <div><strong>보장분석표(전) 미리보기</strong> <span class="badge" id="countBadge"></span></div>
+      <button type="button" class="secondary undo-delete-btn" id="undoDeleteBtnBefore" disabled>되돌리기 (Ctrl+Z)</button>
+    </div>
+    <div class="scrollwrap"><table class="preview" id="previewTable"></table></div>
+  </div>
+
+  <div class="card" id="logCard" style="display:none;">
+    <div class="row" style="justify-content:space-between;cursor:pointer;" id="logToggle">
+      <strong style="font-size:13px;">처리 로그 (어떤 상품이 인식됐는지 자세히 보기)</strong>
+      <span class="badge" id="logToggleLabel">펼치기</span>
+    </div>
+    <div class="log" id="log" style="display:none;"></div>
+  </div>
+</div>
+
+<!-- ============================== 시트: 보장분석표(후) ============================== -->
+<div id="sheet-after" class="sheetpanel" style="display:none;">
+  <div class="card" id="afterCard">
+    <div class="row" style="justify-content:space-between;">
+      <h2>보장분석표(후) — 별칭 자동완성</h2>
+      <div class="row" style="gap:8px;">
+        <button type="button" class="secondary undo-delete-btn" id="undoDeleteBtnAfter" disabled>되돌리기 (Ctrl+Z)</button>
+        <button id="addColBtn" class="secondary">플랜 열 추가</button>
+      </div>
+    </div>
+    <div class="scrollwrap"><table class="grid" id="afterTable"></table></div>
+  </div>
+</div>
+
+<!-- ============================== 시트: 종합비교 ============================== -->
+<div id="sheet-summary" class="sheetpanel" style="display:none;">
+  <div class="card">
+    <h2 id="summaryTitle" style="margin-top:0;">종합 전·후 비교</h2>
+    <div class="sub" style="margin-bottom:16px;">보장분석표(전)/(후)에 입력된 내용을 바탕으로 자동으로 계산됩니다. 별도로 입력할 내용은 없습니다.</div>
+    <div class="summary-premium-row" id="summaryPremiumRow"></div>
+    <div class="summary-groups" id="summaryGroups"></div>
+  </div>
+</div>
+
+<!-- ============================== 시트: 보장차이 ============================== -->
+<div id="sheet-diff" class="sheetpanel" style="display:none;">
+  <div class="card">
+    <h2 style="margin-top:0;">보장 차이 (전 → 후)</h2>
+    <div class="sub" style="margin-bottom:16px;">항목별로 보장분석표(전)과 (후)의 합계를 비교합니다. 후가 전보다 늘어난 항목은 빨간색, 줄어든 항목은 초록색으로 표시됩니다. (국내 증시 표기 관례와 동일)</div>
+    <div class="scrollwrap"><table class="grid" id="diffTable"></table></div>
+  </div>
+</div>
+
+<!-- ============================== 시트: 마스터 ============================== -->
+<div id="sheet-master" class="sheetpanel" style="display:none;">
+  <div class="card" id="masterCard">
+    <div class="row" style="justify-content:space-between;">
+      <h2>마스터 — 내 플랜 라이브러리</h2>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button id="importAdminMasterBtn" class="secondary" type="button" style="font-size:12px;padding:7px 12px;">📥 관리자 마스터 불러오기</button>
+        <div class="status" id="masterStatus" style="margin:0;"></div>
+      </div>
+    </div>
+    <div class="sub" style="margin-bottom:8px;">엑셀 마스터 시트처럼 아래 표에 바로 기입하세요. 별도의 "저장" 버튼 없이, 입력하면 잠시 후 자동으로 저장됩니다. 맨 오른쪽은 항상 새 플랜을 적을 수 있는 빈 열입니다.</div>
+    <div class="scrollwrap"><table class="grid" id="masterTable"></table></div>
+  </div>
+</div>
+
+</div>
+<script>
+/* =========================================================================
+   ENGINE (동작1 + 동작2 VBA 매크로 통합 포트) -- 보장분석표(전) 탭에서 사용
+   37개 담보 타입 taxonomy (ROW_DEFS)는 후/마스터 탭과 동일하게 공유한다.
+   ========================================================================= */
+const CLAUSE_ROW_MAP = {
+  "질병(전체질병을 의미)입원의료비": 9,
+  "질병(전체질병을 의미)외래의료비": 10,
+  "질병(전체질병을 의미)의료비(입원+통원)": 9,
+  "상해+질병(전체상해 및 전체질병을 포괄)입원의료비)": 9,
+  "상해+질병(전체상해 및 전체질병을 포괄)외래의료비)": 10,
+  "상해후유장해": 35, "질병후유장해": 34, "골절진단": 43, "화상진단": 42,
+  "상해수술": 22, "상해수술(유병자)": 22, "상해입원일당": 29, "질병입원일당": 28,
+  "깁스치료": 44, "자동차사고부상위로금": 39, "자동차사고 변호사선임비용": 37,
+  "교통사고처리지원금": 36, "상해사망": 33, "상해사망(유병자)": 33,
+  "질병사망(유병자)": 32, "질병사망": 32, "질병수술": 21, "질병수술(유병자)": 21,
+  "화재벌금담보": 41, "교통사고 벌금(대인)": 38, "다빈도질병수술": 21,
+  "항암방사선약물치료비": 13, "항암방사선치료비": 13, "뇌혈관질환진단": 15,
+  "허혈성심장질환진단": 19, "급성심근경색진단": 20, "암진단": 11, "암진단(유병자)": 11,
+  "소액암진단(유사암진단)": 12, "가족생활배상책임": 40, "뇌출혈진단": 17,
+  "뇌졸중진단": 16, "간병인질병입원일당": 30, "부정맥": 18, "표적항암약물": 14,
+  "상해간병인사용일당": 31, "질병간병인사용일당": 30,
+};
+const TEXT_TAG_MAP = {
+  "대질병수술": "N대수술비", "상해간호간병통합": "상해간호통합서비스",
+  "질병간호간병통합": "질병간호통합서비스", "민사소송법률비용": "민사소송법률비용",
+  "가전제품고장": "가전제품수리비용", "1-7종": "1-7종 수술비", "1-8종": "1-8종 수술비",
+  "중입자": "중입자방사선", "창상봉합술": "창상봉합술",
+};
+// [row, groupLabel(B), itemLabel(C)] -- groupLabel만 병합 표시(첫 행에만 노출)
+const ROW_DEFS = [
+  [9,"실비","실손의료비 입원"],[10,"","실손의료비 통원"],
+  [11,"암","일반암 진단비"],[12,"","유사암 진단비"],[13,"","항암방사선약물"],[14,"","표적항암치료비"],
+  [15,"뇌혈관 질환","뇌혈관 진단비"],[16,"","뇌졸중 진단비"],[17,"","뇌출혈 진단비"],
+  [18,"심장 질환","부정맥 진단비"],[19,"","허혈성 진단비"],[20,"","급성심근경색증 진단비"],
+  [21,"수술비","질병수술비"],[22,"","상해수술비"],[23,"","1종수술비"],[24,"","2종수술비"],[25,"","3종수술비"],[26,"","4종수술비"],[27,"","5종수술비"],
+  [28,"입원비(일당)","질병일당"],[29,"","상해일당"],[30,"","질병 간병인사용 입원일당"],[31,"","상해 간병인사용 입원일당"],
+  [32,"사망","질병사망"],[33,"","상해사망"],
+  [34,"후유장해","질병후유장해 3%"],[35,"","상해후유장해 3%"],
+  [36,"운전자","교통사고처리 지원금"],[37,"","변호사 선임비용"],[38,"","벌금"],[39,"","자동차사고 부상치료비"],
+  [40,"배상책임","일상생활 배상책임"],[41,"","화재벌금"],
+  [42,"화상/골절/깁스","화상 진단비"],[43,"","골절 진단비"],[44,"","깁스 치료비"],
+  [45,"기타","기타(텍스트 태그)"],
+];
+// row 45(기타)는 금액이 아니라 텍스트이므로 숫자 합산 대상에서 제외하고 텍스트 그대로 다룬다.
+const TEXT_ROWS = new Set([45]);
+// 마스터/보장분석표(후)의 담보 금액 칸은 숫자뿐 아니라 텍스트도 입력할 수 있다(예: "미가입",
+// "무제한" 등 메모성 텍스트). 합산/한도 계산에서는 순수 숫자로 해석되는 값만 그 값 그대로,
+// 텍스트가 섞여 있으면 0으로 취급한다.
+function numOrZero(v){
+  if(v === null || v === undefined || v === "") return 0;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/* =========================================================================
+   공용 유틸: 고정 열 너비(colgroup) / 엑셀에서 드래그로 복사한 범위를 그대로
+   붙여넣기 (표 안의 <input>에 data-gridrow/data-gridcol을 매겨두면,
+   붙여넣은 텍스트를 탭/줄바꿈 기준으로 잘라서 같은 모양으로 채워 넣는다).
+   보장분석표(전)/(후) 표가 같은 값(140px)을 데이터 열 너비로 쓰도록 공유한다.
+   ========================================================================= */
+const DATA_COL_WIDTH = 140;
+function buildColgroupHtml(prefixWidths, dataWidth, dataCount){
+  let html = "<colgroup>";
+  prefixWidths.forEach(w=> html += `<col style="width:${w}px">`);
+  for(let i=0;i<dataCount;i++) html += `<col style="width:${dataWidth}px">`;
+  html += "</colgroup>";
+  return html;
+}
+function wireExcelPaste(container){
+  if(!container || container.__pasteWired) return;
+  container.__pasteWired = true;
+  container.addEventListener("paste", (e)=>{
+    const target = e.target;
+    if(!target || !target.dataset || target.dataset.gridrow===undefined || target.dataset.gridcol===undefined) return;
+    const text = (e.clipboardData || window.clipboardData).getData("text");
+    if(!text || !/[\t\n]/.test(text)) return; // 값 하나만 붙여넣는 경우는 브라우저 기본 동작에 맡긴다
+    e.preventDefault();
+    const rows = text.replace(/\r/g,"").split("\n");
+    while(rows.length && rows[rows.length-1]==="") rows.pop();
+    const startRow = Number(target.dataset.gridrow);
+    const startCol = Number(target.dataset.gridcol);
+    rows.forEach((line, dr)=>{
+      line.split("\t").forEach((val, dc)=>{
+        const el = container.querySelector(`[data-gridrow="${startRow+dr}"][data-gridcol="${startCol+dc}"]`);
+        if(el){
+          el.value = val;
+          el.dispatchEvent(new Event("input", {bubbles:true}));
+        }
+      });
+    });
+  });
+}
+
+/* =========================================================================
+   삭제 + 되돌리기(실행취소)
+   - 보장분석표(전)/(후) 표에서 "삭제" 버튼을 누르면 그 열을 완전히 제거한다.
+   - 삭제 직전 상태를 deleteHistory 스택에 저장해두고, "되돌리기" 버튼이나
+     Ctrl+Z(텍스트 입력 중이 아닐 때)를 누르면 가장 최근 삭제를 그대로 복원한다.
+   - (전)에서 "유지" 중이던 상품을 삭제하면 (후)의 연동 열도 함께 사라지고,
+     되돌리면 다시 함께 돌아온다 (안정적인 id로 서로 연결되어 있기 때문).
+   ========================================================================= */
+let deleteHistory = [];
+const MAX_UNDO_HISTORY = 20;
+
+function pushDeleteHistory(entry){
+  deleteHistory.push(entry);
+  if(deleteHistory.length > MAX_UNDO_HISTORY) deleteHistory.shift();
+  updateUndoButtons();
+}
+
+function updateUndoButtons(){
+  const has = deleteHistory.length > 0;
+  document.querySelectorAll(".undo-delete-btn").forEach(btn=> btn.disabled = !has);
+}
+
+function deleteBeforeColumn(i){
+  if(!lastResult || !lastResult.columns[i]) return;
+  const removed = lastResult.columns.splice(i, 1)[0];
+  pushDeleteHistory({ kind:"before", index:i, data: JSON.parse(JSON.stringify(removed)) });
+  renderPreview(lastResult);
+  syncAfterCarryoverFromBefore();
+}
+
+function deleteAfterColumn(i){
+  const col = afterColumns[i];
+  if(!col) return;
+  afterColumns.splice(i, 1);
+  pushDeleteHistory({ kind:"after", index:i, data: JSON.parse(JSON.stringify(col)) });
+  if(col.source === "carryover" && lastResult){
+    const src = lastResult.columns.find(c=>c.id === col.sourceId);
+    if(src){ src.kept = false; applyKeptUI(); }
+  }
+  if(!afterColumns.length) afterColumns = [blankAfterColumn(), blankAfterColumn()];
+  renderAfterSheet();
+}
+
+function undoLastDelete(){
+  const entry = deleteHistory.pop();
+  updateUndoButtons();
+  if(!entry) return;
+  if(entry.kind === "before"){
+    if(!lastResult) return;
+    const idx = Math.min(entry.index, lastResult.columns.length);
+    lastResult.columns.splice(idx, 0, entry.data);
+    renderPreview(lastResult);
+    syncAfterCarryoverFromBefore();
+  } else if(entry.kind === "after"){
+    const idx = Math.min(entry.index, afterColumns.length);
+    afterColumns.splice(idx, 0, entry.data);
+    if(entry.data.source === "carryover" && lastResult){
+      const src = lastResult.columns.find(c=>c.id === entry.data.sourceId);
+      if(src){ src.kept = true; applyKeptUI(); }
+    }
+    renderAfterSheet();
+  }
+}
+
+document.querySelectorAll(".undo-delete-btn").forEach(btn=>{
+  btn.addEventListener("click", undoLastDelete);
+});
+
+// 텍스트 입력창(input/textarea)에 포커스가 있을 때는 Ctrl+Z가 브라우저 기본
+// 되돌리기(타이핑 되돌리기)로 그대로 동작하도록 건드리지 않는다. 그 외의
+// 경우(삭제 버튼을 누른 직후처럼 포커스가 버튼/표 바깥에 있을 때)에만
+// Ctrl+Z(맥은 Cmd+Z)로 방금 삭제한 열을 되돌린다.
+document.addEventListener("keydown", (e)=>{
+  const isUndoKey = (e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === "z" || e.key === "Z");
+  if(!isUndoKey) return;
+  const tag = (document.activeElement && document.activeElement.tagName) || "";
+  if(tag === "INPUT" || tag === "TEXTAREA") return;
+  e.preventDefault();
+  undoLastDelete();
+});
+
+/* =========================================================================
+   엑셀처럼 숫자/텍스트를 입력하고 Enter를 누르면 바로 아래 칸으로, 왼쪽/오른쪽
+   화살표를 누르면(칸 안 커서가 맨 앞/맨 끝에 있을 때) 옆 칸으로 이동한다.
+   (data-gridrow/data-gridcol을 가진 <input>/<textarea>에서만 동작 -- 여러 줄
+   textarea인 상품명 칸은 Enter가 줄바꿈으로 쓰이도록 그대로 둔다.)
+   ========================================================================= */
+function moveGridFocus(container, target, dr, dc){
+  const row = Number(target.dataset.gridrow), col = Number(target.dataset.gridcol);
+  const next = container.querySelector(`[data-gridrow="${row+dr}"][data-gridcol="${col+dc}"]`);
+  if(next){ next.focus(); if(next.select) next.select(); return true; }
+  return false;
+}
+function wireGridEnterNav(container){
+  if(!container || container.__enterNavWired) return;
+  container.__enterNavWired = true;
+  container.addEventListener("keydown", (e)=>{
+    const target = e.target;
+    if(!target || !target.dataset || target.dataset.gridrow===undefined || target.dataset.gridcol===undefined) return;
+    const tag = target.tagName;
+    if(tag !== "INPUT" && tag !== "TEXTAREA") return;
+
+    if(e.key === "Enter"){
+      if(tag !== "INPUT") return; // 여러 줄 textarea는 Enter가 줄바꿈으로 쓰이도록 그대로 둔다
+      e.preventDefault();
+      moveGridFocus(container, target, 1, 0);
+      return;
+    }
+
+    if(e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    // number 타입 입력창은 selectionStart를 읽을 수 없고(브라우저 제약) 화살표로 값 안에서
+    // 커서를 옮기거나 스핀 버튼을 조작하는 기본 동작을 그대로 살려두기 위해 건드리지 않는다.
+    if(tag === "INPUT" && target.type === "number") return;
+    const atStart = target.selectionStart === 0 && target.selectionEnd === 0;
+    const atEnd = target.selectionStart === target.value.length && target.selectionEnd === target.value.length;
+    if(e.key === "ArrowLeft" && atStart){
+      if(moveGridFocus(container, target, 0, -1)) e.preventDefault();
+    } else if(e.key === "ArrowRight" && atEnd){
+      if(moveGridFocus(container, target, 0, 1)) e.preventDefault();
+    }
+  });
+}
+
+/* =========================================================================
+   드래그로 범위를 선택해 복사하기 (엑셀처럼). 마우스를 누른 채로 여러 칸을
+   지나가면 사각형 범위가 파란색으로 표시되고, 그 상태에서 Ctrl+C를 누르면
+   선택한 범위가 탭/줄바꿈으로 구분된 텍스트로 클립보드에 복사된다.
+   붙여넣기는 기존 wireExcelPaste()가 그대로 처리한다 (탭/줄바꿈이 들어있는
+   텍스트를 data-gridrow/data-gridcol 기준으로 채워 넣음).
+   ========================================================================= */
+function wireDragSelect(container){
+  if(!container || container.__dragSelectWired) return;
+  container.__dragSelectWired = true;
+
+  let mouseDown = false;
+  let dragging = false;
+  let anchor = null;
+  let selection = null;
+
+  function cellAt(el){
+    const t = el && el.closest && el.closest("[data-gridrow]");
+    if(!t) return null;
+    return { row: Number(t.dataset.gridrow), col: Number(t.dataset.gridcol) };
+  }
+  function clearHighlight(){
+    container.querySelectorAll(".range-selected").forEach(el=> el.classList.remove("range-selected"));
+  }
+  function highlightRange(r1,c1,r2,c2){
+    clearHighlight();
+    const rowMin=Math.min(r1,r2), rowMax=Math.max(r1,r2), colMin=Math.min(c1,c2), colMax=Math.max(c1,c2);
+    container.querySelectorAll("[data-gridrow]").forEach(el=>{
+      const r = Number(el.dataset.gridrow), c = Number(el.dataset.gridcol);
+      if(r>=rowMin && r<=rowMax && c>=colMin && c<=colMax) el.classList.add("range-selected");
+    });
+  }
+
+  container.addEventListener("mousedown", (e)=>{
+    const cell = cellAt(e.target);
+    if(!cell) return;
+    mouseDown = true; dragging = false; anchor = cell; selection = null;
+    clearHighlight();
+  });
+  container.addEventListener("mouseover", (e)=>{
+    if(!mouseDown || !anchor) return;
+    const cell = cellAt(e.target);
+    if(!cell) return;
+    if(cell.row !== anchor.row || cell.col !== anchor.col) dragging = true;
+    if(dragging){
+      selection = { r1:anchor.row, c1:anchor.col, r2:cell.row, c2:cell.col };
+      highlightRange(selection.r1, selection.c1, selection.r2, selection.c2);
+    }
+  });
+  document.addEventListener("mouseup", ()=>{ mouseDown = false; });
+
+  container.addEventListener("copy", (e)=>{
+    if(!selection) return;
+    const rowMin=Math.min(selection.r1,selection.r2), rowMax=Math.max(selection.r1,selection.r2);
+    const colMin=Math.min(selection.c1,selection.c2), colMax=Math.max(selection.c1,selection.c2);
+    const lines = [];
+    for(let r=rowMin;r<=rowMax;r++){
+      const cells = [];
+      for(let c=colMin;c<=colMax;c++){
+        const el = container.querySelector(`[data-gridrow="${r}"][data-gridcol="${c}"]`);
+        cells.push(el ? el.value : "");
+      }
+      lines.push(cells.join("\t"));
+    }
+    const tsv = lines.join("\n");
+    e.clipboardData.setData("text/plain", tsv);
+    e.preventDefault();
+  });
+}
+
+function normalizeSpace(s){ return String(s==null?"":s).replace(/ /g," ").replace(/\s+/g," ").trim(); }
+const ROMAN_FIX_MAP = { I:"Ⅰ", II:"Ⅱ", III:"Ⅲ" };
+function fixRomanNumeralGlyphs(s){
+  return String(s==null?"":s).replace(/(?<=[가-힣])I{1,3}(?![A-Za-z])/g, m => ROMAN_FIX_MAP[m] || m);
+}
+function parseAmountToManwon(raw){
+  let t = String(raw==null?"":raw).trim();
+  if(!t) return 0;
+  t = t.replace(/,/g,"");
+  if(t.includes("억")){
+    const parts = t.split("억");
+    const billionPart = parts[0].trim();
+    let lngBillionPart = 0;
+    if(/^-?\d+(\.\d+)?$/.test(billionPart)) lngBillionPart = Math.round(parseFloat(billionPart)*10000);
+    let rest = (parts[1]||"").trim();
+    let finalAmount = 0;
+    if(lngBillionPart>0){
+      if(rest.includes("만")){
+        rest = rest.replace(/만/g,"").trim();
+        finalAmount = /^-?\d+(\.\d+)?$/.test(rest) ? Math.round(parseFloat(rest))+lngBillionPart : lngBillionPart;
+      } else { finalAmount = lngBillionPart; }
+    }
+    return finalAmount;
+  }
+  t = t.replace(/만/g,"").trim();
+  return /^-?\d+(\.\d+)?$/.test(t) ? Math.round(parseFloat(t)) : 0;
+}
+function matchCoverageLines(lines){
+  const amounts = {}; const textTagsSet = new Set();
+  let count27 = 0; let row13Used = false;
+  for(const line of lines){
+    const nameE = normalizeSpace(line.normName);
+    const nameD = normalizeSpace(line.rawName);
+    const amountRaw = line.amount;
+    if(!nameE && !nameD) continue;
+    const isExcluded = /특정/.test(nameE) || /특정/.test(nameD);
+    let targetRow = 0;
+    if(!isExcluded){
+      if(nameE === "질병종수술"){
+        count27 += 1;
+        if(count27 <= 5) targetRow = 22 + count27;
+      } else if(CLAUSE_ROW_MAP[nameE] !== undefined){
+        targetRow = CLAUSE_ROW_MAP[nameE];
+      } else if(nameE.includes("교통사고처리지원금")){
+        targetRow = CLAUSE_ROW_MAP["교통사고처리지원금"];
+      } else if(nameD){
+        if(nameD.includes("부정맥")) targetRow = CLAUSE_ROW_MAP["부정맥"];
+        else if(nameD.includes("표적항암약물")) targetRow = CLAUSE_ROW_MAP["표적항암약물"];
+        else if(nameD.includes("상해간병인사용일당")) targetRow = CLAUSE_ROW_MAP["상해간병인사용일당"];
+        else if(nameD.includes("질병간병인사용일당")) targetRow = CLAUSE_ROW_MAP["질병간병인사용일당"];
+      }
+      if(targetRow>0){
+        if(targetRow===13 && row13Used){ targetRow = 0; }
+        else{
+          const amt = parseAmountToManwon(amountRaw);
+          if(amt>0){ amounts[targetRow] = (amounts[targetRow]||0)+amt; if(targetRow===13) row13Used = true; }
+        }
+      }
+    }
+    if(nameD){
+      for(const key of Object.keys(TEXT_TAG_MAP)){
+        if(nameD.includes(key)) textTagsSet.add(TEXT_TAG_MAP[key]);
+      }
+    }
+  }
+  return { amounts, textTags: Array.from(textTagsSet) };
+}
+function parseHeaderBlock(companyLine, productLine, holderTermLine, periodPremiumLine){
+  let insurer = normalizeSpace(companyLine);
+  if(insurer.includes("|")) insurer = normalizeSpace(insurer.split("|")[0]);
+  const productName = normalizeSpace(productLine);
+  const line0 = normalizeSpace(holderTermLine);
+  const line1 = normalizeSpace(periodPremiumLine);
+  let holder="", term="추출 오류";
+  const firstSlash = line0.indexOf("/");
+  if(firstSlash>=0){
+    holder = line0.slice(0,firstSlash).trim();
+    const secondSlash = line0.indexOf("/", firstSlash+1);
+    term = secondSlash>=0 ? line0.slice(secondSlash+1).trim() : "추출 오류";
+  } else { holder = line0; }
+  if(!holder) holder = "증권확인";
+  const tokens1 = line1.split(" ").filter(Boolean);
+  const duration = tokens1.length ? tokens1[0] : "";
+  let premium = tokens1.length ? tokens1[tokens1.length-1] : line1;
+  premium = premium.replace(/월납/g,"");
+  return { insurer, productName, holder, term, duration, premium };
+}
+
+/* =========================================================================
+   PDF 리더 (border-aware 좌표 기반 표 재구성)
+   ========================================================================= */
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.worker.min.js";
+const COL_BOUNDS = [30, 58, 88, 363, 508, 600]; // 번호/구분/원담보명/표준담보명/가입금액
+function colOf(x0, x1){
+  const cx = (x0+x1)/2;
+  for(let i=0;i<COL_BOUNDS.length-1;i++){ if(cx>=COL_BOUNDS[i] && cx<COL_BOUNDS[i+1]) return i; }
+  return -1;
+}
+async function extractPdfPages(file){
+  const buf = await file.arrayBuffer();
+  const doc = await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise;
+  const pages = [];
+  for(let p=1;p<=doc.numPages;p++){
+    const page = await doc.getPage(p);
+    const viewport = page.getViewport({scale:1});
+    const content = await page.getTextContent();
+    const items = content.items.map(it=>{
+      const x0 = it.transform[4], y = it.transform[5];
+      return { x0, top: viewport.height-y, text: it.str, width: it.width||0 };
+    });
+    pages.push({ items });
+  }
+  return pages;
+}
+function groupIntoLines(items, tol=2.2){
+  const sorted = items.filter(it=>it.text.trim().length>0).slice().sort((a,b)=>a.top-b.top || a.x0-b.x0);
+  const lines = [];
+  for(const it of sorted){
+    let line = lines.find(l=>Math.abs(l.top-it.top)<=tol);
+    if(!line){ line = {top:it.top, items:[]}; lines.push(line); }
+    line.items.push(it);
+  }
+  lines.sort((a,b)=>a.top-b.top);
+  for(const l of lines) l.items.sort((a,b)=>a.x0-b.x0);
+  return lines;
+}
+function joinItems(items, gapThreshold=0.8){
+  const sorted = items.slice().sort((a,b)=>a.x0-b.x0);
+  let out=""; let prevEnd=null;
+  for(const it of sorted){
+    if(prevEnd!==null && (it.x0-prevEnd)>gapThreshold) out += " ";
+    out += it.text; prevEnd = it.x0+it.width;
+  }
+  return out.replace(/\s+/g," ").trim();
+}
+function lineText(line){ return joinItems(line.items); }
+function parseReportPage(page){
+  const lines = groupIntoLines(page.items);
+  const startIdx = lines.findIndex(l=>lineText(l).includes("가입일자"));
+  if(startIdx<0) return null;
+  const header = parseHeaderBlock(
+    lineText(lines[startIdx]),
+    fixRomanNumeralGlyphs(lineText(lines[startIdx+1])),
+    lineText(lines[startIdx+2]),
+    lineText(lines[startIdx+3])
+  );
+  const dataLines = [];
+  for(let i=startIdx+4;i<lines.length;i++){
+    const txt = lineText(lines[i]);
+    if(txt.includes("가입일자")) break;
+    if(/GA사업단|GA-\d|\d+\/\d+$/.test(txt)) continue;
+    const colItems = [[],[],[],[],[]];
+    for(const it of lines[i].items){
+      const c = colOf(it.x0, it.x0+it.width);
+      if(c<0) continue;
+      colItems[c].push(it);
+    }
+    const cols = colItems.map(arr=>joinItems(arr));
+    const idx = cols[0].trim();
+    if(!/^\d+$/.test(idx)) continue;
+    dataLines.push({
+      rawName: fixRomanNumeralGlyphs(cols[2].trim()),
+      normName: fixRomanNumeralGlyphs(cols[3].trim()),
+      amount: cols[4].trim(),
+    });
+  }
+  return { header, dataLines };
+}
+function extractCustomerNameFromPdfTop(page){
+  const lines = groupIntoLines(page.items);
+  const l = lines.find(l=>lineText(l).includes("님의"));
+  if(!l) return "";
+  const t = lineText(l);
+  const m = t.match(/^([^\s(]+)/);
+  return m ? m[1] : "";
+}
+
+/* =========================================================================
+   XLSX(Table N) 리더 -- 이미 변환된 엑셀을 그대로 올린 경우
+   ========================================================================= */
+function cellText(cellValue){
+  if(cellValue == null) return "";
+  if(typeof cellValue === "object"){
+    if(Array.isArray(cellValue.richText)) return cellValue.richText.map(r=>r.text||"").join("");
+    if("result" in cellValue) return cellValue.result==null ? "" : String(cellValue.result);
+    if("text" in cellValue) return String(cellValue.text);
+    return "";
+  }
+  return String(cellValue);
+}
+function cellTextMasterOnly(cell){
+  if(cell.isMerged && cell.master !== cell) return "";
+  return cellText(cell.value);
+}
+async function readTableSheetsFromWorkbook(wb){
+  const tables = [];
+  wb.eachSheet(sheet=>{
+    if(!/^Table\s*\d+$/i.test(sheet.name)) return;
+    const a3 = cellText(sheet.getCell("A3").value);
+    const a4 = cellText(sheet.getCell("A4").value);
+    const [l0="", l1=""] = a3.split("\n");
+    const [l2="", l3=""] = a4.split("\n");
+    const header = parseHeaderBlock(l0, fixRomanNumeralGlyphs(l1), l2, l3);
+    const dataLines = [];
+    let r = 5;
+    let blanks = 0;
+    while(blanks < 4 && r < 500){
+      const d = cellTextMasterOnly(sheet.getCell("D"+r));
+      const e = cellTextMasterOnly(sheet.getCell("E"+r));
+      const f = cellTextMasterOnly(sheet.getCell("F"+r));
+      if(!d && !e && !f){ blanks++; r++; continue; }
+      blanks = 0;
+      dataLines.push({
+        rawName: fixRomanNumeralGlyphs(normalizeSpace(d)),
+        normName: fixRomanNumeralGlyphs(normalizeSpace(e)),
+        amount: normalizeSpace(f),
+      });
+      r++;
+    }
+    tables.push({ header, dataLines, sheetOrder: parseInt(sheet.name.replace(/\D/g,""),10) });
+  });
+  tables.sort((a,b)=>a.sheetOrder-b.sheetOrder);
+  return tables;
+}
+
+/* =========================================================================
+   보장분석표(전) 탭 -- 메인 파이프라인
+   ========================================================================= */
+let lastResult = null;
+let nextBeforeColId = 1;
+// 현재 이어서 작업 중인 "보장분석표 다운로드 작업" id. null이면 다음 다운로드는 새 작업으로
+// 취급되어 포인트가 차감된다. 이전에 결제하고 받은 파일을 "이전 보장분석표 불러오기"로 다시
+// 불러와서 내 소유임이 확인되면 여기에 채워지고, 그 다음 다운로드부터는 재차감 없이 이어진다.
+let currentJobId = null;
+const fileInput = document.getElementById("fileInput");
+const runBtn = document.getElementById("runBtn");
+const dlBtn = document.getElementById("dlBtn");
+const status = document.getElementById("status");
+const logBox = document.getElementById("log");
+
+fileInput.addEventListener("change", ()=>{
+  runBtn.disabled = !fileInput.files.length;
+  dlBtn.disabled = true;
+  status.textContent = fileInput.files.length ? `선택됨: ${fileInput.files[0].name}` : "파일을 선택하세요.";
+  status.className = "status";
+});
+
+const logCard = document.getElementById("logCard");
+const logToggle = document.getElementById("logToggle");
+const logToggleLabel = document.getElementById("logToggleLabel");
+
+function log(msg){
+  logBox.textContent += msg + "\n";
+  logBox.scrollTop = logBox.scrollHeight;
+  logCard.style.display = "block"; // 로그 칸 자체(아래쪽)는 노출하되, 내용은 접어둔 채로 둔다
+}
+
+logToggle.addEventListener("click", ()=>{
+  const isHidden = logBox.style.display === "none" || !logBox.style.display;
+  logBox.style.display = isHidden ? "block" : "none";
+  logToggleLabel.textContent = isHidden ? "접기" : "펼치기";
+});
+
+runBtn.addEventListener("click", async ()=>{
+  const file = fileInput.files[0];
+  if(!file) return;
+  runBtn.disabled = true;
+  status.className = "status";
+  status.textContent = "처리 중...";
+  logBox.textContent = "";
+  logBox.style.display = "none";
+  logToggleLabel.textContent = "펼치기";
+  logCard.style.display = "none";
+  try{
+    let tables = [];
+    let customerName = "";
+    const isPdf = /\.pdf$/i.test(file.name);
+    if(isPdf){
+      log("PDF 텍스트 추출 중 (pdf.js)...");
+      const pages = await extractPdfPages(file);
+      customerName = extractCustomerNameFromPdfTop(pages[0]) || "";
+      pages.forEach((page, i)=>{
+        const parsed = parseReportPage(page);
+        if(!parsed){ log(`  - ${i+1}페이지: 상품 블록을 찾지 못해 건너뜀`); return; }
+        tables.push(parsed);
+        log(`  - ${i+1}페이지 -> ${parsed.header.insurer} / ${parsed.header.productName} (${parsed.dataLines.length}개 담보 라인)`);
+      });
+    } else {
+      log("엑셀(Table N 시트) 읽는 중 (ExcelJS)...");
+      const buf = await file.arrayBuffer();
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(buf);
+      tables = await readTableSheetsFromWorkbook(wb);
+      tables.forEach((t,i)=> log(`  - Table ${i+1} -> ${t.header.insurer} / ${t.header.productName} (${t.dataLines.length}개 담보 라인)`));
+    }
+    if(!tables.length) throw new Error("상품 데이터를 하나도 찾지 못했습니다. 파일 형식을 확인해주세요.");
+
+    log(`동작1+2 통합 매칭 로직 실행 중... (${tables.length}개 상품)`);
+    const columns = tables.map(t=>{
+      const { amounts, textTags } = matchCoverageLines(t.dataLines);
+      return { header: t.header, amounts, textTags, kept: false, id: "b" + (nextBeforeColId++) };
+    });
+
+    lastResult = { columns, customerName, baseName: file.name.replace(/\.(pdf|xlsx|xlsm)$/i,"") };
+    currentJobId = null; // 새로 분석한 결과이므로 이전에 이어서 작업하던 job과는 무관한 새 작업으로 취급
+    renderPreview(lastResult);
+    syncAfterCarryoverFromBefore(); // 해지 안 한(유지 중인) 상품을 보장분석표(후)에 순차적으로 자동 반영
+    status.className = "status ok";
+    status.textContent = `완료: 상품 ${columns.length}건 처리됨.`;
+    dlBtn.disabled = false;
+  } catch(err){
+    console.error(err);
+    status.className = "status err";
+    status.textContent = "오류: " + err.message;
+  } finally{
+    runBtn.disabled = false;
+  }
+});
+
+/* =========================================================================
+   "이전 보장분석표 불러오기" -- 이전에 With Partners에서 내려받은 .xlsx를
+   (텍스트만 손으로 고쳤더라도) 다시 올리면, 보장분석표(전)/(후) 시트에 있던
+   내용을 그대로 화면으로 되살려서 이어서 수정할 수 있게 한다.
+   숨김 시트(_wp_job)에 심어둔 job id로 "내가 실제로 결제해서 받은 파일"인지
+   서버(coverage_jobs, RLS로 본인 것만 조회 가능)에 대조해서만 다음 다운로드를
+   무료로 이어가게 하며, 그 확인 없이는(파일을 남에게 받았거나 job id가 없는
+   경우) 다음 다운로드를 새 작업으로 취급해 정상적으로 포인트를 차감한다.
+   ========================================================================= */
+const resumeFileInput = document.getElementById("resumeFileInput");
+const resumeUploadBtn = document.getElementById("resumeUploadBtn");
+const resumeStatus = document.getElementById("resumeStatus");
+const resumeDropZone = document.getElementById("resumeDropZone");
+
+async function loadResumeFile(file){
+  if(!file) return;
+  resumeUploadBtn.disabled = true;
+  resumeStatus.className = "status";
+  resumeStatus.textContent = "불러오는 중...";
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buf);
+    const wsBefore = wb.getWorksheet("보장분석표(전)");
+    const wsAfter = wb.getWorksheet("보장분석표(후)");
+    if(!wsBefore || !wsAfter) throw new Error("보장분석표(전)/(후) 시트를 찾을 수 없습니다. With Partners에서 내려받은 파일인지 확인해주세요.");
+
+    const beforeRaw = readColumnsFromWorksheet(wsBefore);
+    const afterRaw = readColumnsFromWorksheet(wsAfter);
+    if(!beforeRaw.length) throw new Error("보장분석표(전) 시트에서 상품 데이터를 찾지 못했습니다.");
+
+    const beforeColumns = beforeRaw.map(c=>({
+      header: { insurer:c.insurer, productName:c.productName, duration:c.duration, term:c.term, premium:c.premium, holder:c.holder },
+      amounts: c.amounts,
+      textTags: c.text45 ? c.text45.split(",").map(s=>s.trim()).filter(Boolean) : [],
+      kept: !!c.wasKept, // 저장 당시 "유지" 표시(연한 노란 배경)돼 있던 상품은 그대로 유지 상태로 복원
+      id: "b" + (nextBeforeColId++),
+    }));
+    lastResult = {
+      columns: beforeColumns,
+      customerName: cellText(wsBefore.getCell("C2").value),
+      baseName: file.name.replace(/\.(xlsx|xlsm)$/i,""),
+    };
+
+    const rawAfterColumns = afterRaw.map(c=>{
+      const items = { ...c.amounts };
+      if(c.text45) items["45"] = c.text45;
+      // 저장 당시 자동연동(=(전)에서 유지 중이던 상품) 표시가 돼 있던 열은 일단 "carryover"로
+      // 표시해두고, 아래에서 어떤 (전) 상품과 짝인지 순서대로 다시 연결한다.
+      return { source: c.wasKept ? "carryover" : "manual", sourceId:null, alias:"", lastMatchedPlanId:null,
+        productName:c.productName, insurer:c.insurer, duration:c.duration, term:c.term,
+        premium:c.premium, holder:c.holder, items };
+    });
+    // 자동연동은 항상 "(전)에서 유지 체크한 순서대로" 만들어지므로, 유지 표시였던 (전) 상품과
+    // 자동연동 표시였던 (후) 상품을 나온 순서 그대로 짝지어 다시 연결한다(엑셀 파일 자체에는
+    // 어떤 (전) 상품과 연결돼 있었는지 id까지는 저장돼 있지 않고 색으로만 표시돼 있었기 때문).
+    const keptBeforeCols = beforeColumns.filter(c=>c.kept);
+    const carryoverAfterCols = rawAfterColumns.filter(c=>c.source==="carryover");
+    const pairCount = Math.min(keptBeforeCols.length, carryoverAfterCols.length);
+    for(let i=0;i<pairCount;i++) carryoverAfterCols[i].sourceId = keptBeforeCols[i].id;
+    // 개수가 서로 안 맞아 짝을 못 찾은 나머지가 있다면(드문 경우) 일반 열로 되돌려둔다 --
+    // sourceId 없이 "carryover"로 남겨두면 다음 유지 체크 변경 때 고아 열로 보고 지워질 수 있다.
+    for(let i=pairCount;i<carryoverAfterCols.length;i++) carryoverAfterCols[i].source = "manual";
+
+    afterColumns = rawAfterColumns;
+    if(!afterColumns.length) afterColumns = [blankAfterColumn(), blankAfterColumn()];
+
+    renderPreview(lastResult);
+    syncAfterCarryoverFromBefore(); // 위에서 짝지어둔 sourceId를 그대로 이어받아 렌더링(내부에서 renderAfterSheet 호출)
+    dlBtn.disabled = false;
+    deleteHistory = [];
+    updateUndoButtons();
+
+    // 숨김 시트의 job id가 내 소유로 확인되면(=내가 실제로 결제해서 받은 파일을 이어서
+    // 수정하는 것이면) 다음 다운로드부터는 재차감 없이 이어받을 수 있게 한다.
+    let resumedFree = false;
+    try{
+      const hiddenWs = wb.getWorksheet("_wp_job");
+      const jobId = hiddenWs ? cellText(hiddenWs.getCell("A1").value) : "";
+      if(jobId){
+        const owned = await getOwnCoverageJob(jobId);
+        if(owned && owned.id === jobId){
+          currentJobId = jobId;
+          resumedFree = true;
+          touchCoverageJob(jobId).catch(()=>{}); // 최근 사용 시각 갱신 -- 실패해도 불러오기 자체는 그대로 진행
+        } else {
+          currentJobId = null;
+        }
+      } else {
+        currentJobId = null;
+      }
+    }catch(jobErr){
+      console.error("작업 소유권 확인 실패:", jobErr);
+      currentJobId = null;
+    }
+
+    resumeStatus.className = "status ok";
+    resumeStatus.textContent = resumedFree
+      ? `불러왔습니다 (상품 ${lastResult.columns.length}건, 유지 표시 포함). 내가 결제했던 작업으로 확인되어, 다음 다운로드는 포인트 차감 없이 받을 수 있습니다.`
+      : `불러왔습니다 (상품 ${lastResult.columns.length}건, 유지 표시 포함). 다만 이 파일이 결제했던 작업인지 확인되지 않아, 다음 다운로드는 새 작업으로 처리되어 포인트가 차감됩니다.`;
+  }catch(err){
+    console.error(err);
+    resumeStatus.className = "status err";
+    resumeStatus.textContent = "불러오기 실패: " + err.message;
+  }finally{
+    resumeUploadBtn.disabled = false;
+  }
+}
+
+resumeUploadBtn.addEventListener("click", ()=> resumeFileInput.click());
+resumeFileInput.addEventListener("change", ()=>{
+  const file = resumeFileInput.files[0];
+  resumeFileInput.value = ""; // 같은 파일을 다시 골라도 change 이벤트가 뜨도록 초기화
+  loadResumeFile(file);
+});
+
+// 처음 분석용 파일 선택(fileInput)처럼, 이 영역에도 파일을 그냥 끌어다 놓을 수 있게 한다.
+["dragenter","dragover"].forEach(evt=>{
+  resumeDropZone.addEventListener(evt, (e)=>{
+    e.preventDefault();
+    resumeDropZone.classList.add("drop-hover");
+  });
+});
+["dragleave","drop"].forEach(evt=>{
+  resumeDropZone.addEventListener(evt, (e)=>{
+    e.preventDefault();
+    if(evt === "dragleave" && resumeDropZone.contains(e.relatedTarget)) return; // 자식 요소 사이를 지나갈 때는 무시
+    resumeDropZone.classList.remove("drop-hover");
+  });
+});
+resumeDropZone.addEventListener("drop", (e)=>{
+  const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if(file) loadResumeFile(file);
+});
+
+// 원본 서식지 D7의 SUMPRODUCT(--IFERROR(VALUE(SUBSTITUTE(...,"원","")),0)) 수식과
+// 동일한 계산: 상품별 보험료 텍스트에서 "원"/","를 떼고 숫자로 바꿀 수 있는 것만 모두 더함
+// ("보험료미제공"처럼 숫자가 아닌 값은 0으로 취급).
+function sumPremiums(columns){
+  let sum = 0;
+  columns.forEach(c=>{
+    const n = parseFloat(String(c.header.premium||"").replace(/,/g,"").replace(/원/g,""));
+    if(!isNaN(n)) sum += n;
+  });
+  return sum;
+}
+
+// 상품별로 "유지" 버튼을 눌렀는지 여부에 따라 보장분석표(전)의 계약정보 6개 행
+// (보험회사/상품명/보험기간/납기·만기/보험료/계약자)에서 그 상품 열만 누런색으로
+// 표시하고, 유지를 누른(체크한) 상품만 보장분석표(후)로 순서대로 넘어간다.
+// (기본값은 "유지 안 함" -- 유지를 직접 눌러서 체크해야 후로 넘어간다.)
+function toggleKept(i){
+  if(!lastResult || !lastResult.columns[i]) return;
+  lastResult.columns[i].kept = !lastResult.columns[i].kept;
+  applyKeptUI();
+  syncAfterCarryoverFromBefore();
+}
+function applyKeptUI(){
+  if(!lastResult) return;
+  const table = document.getElementById("previewTable");
+  if(!table) return;
+  table.querySelectorAll(".meta-cell").forEach(td=>{
+    const i = Number(td.dataset.metacol);
+    const kept = !!(lastResult.columns[i] && lastResult.columns[i].kept);
+    td.classList.toggle("kept-cell", kept);
+  });
+  table.querySelectorAll(".keep-btn").forEach(btn=>{
+    const i = Number(btn.dataset.col);
+    const kept = !!(lastResult.columns[i] && lastResult.columns[i].kept);
+    btn.textContent = kept ? "유지 중 (해제하려면 클릭)" : "유지";
+    btn.classList.toggle("active-keep", kept);
+    btn.classList.toggle("secondary", !kept);
+  });
+}
+
+function renderPreview(result){
+  const card = document.getElementById("previewCard");
+  const table = document.getElementById("previewTable");
+  const countBadge = document.getElementById("countBadge");
+  card.style.display = "block";
+  countBadge.textContent = `상품 ${result.columns.length}건`;
+
+  let html = buildColgroupHtml([60,150,90], DATA_COL_WIDTH, result.columns.length);
+  html += `<thead><tr><th class="stick-l0"></th><th class="stick-l60">구분</th><th class="stick-l210">합계<br>(D열)</th>`;
+  result.columns.forEach((c,i)=> html += `<th>${String.fromCharCode(69+i)}열<br>`+
+    `<button type="button" class="keep-btn ${c.kept?'active-keep':'secondary'}" data-col="${i}" style="margin-top:4px;padding:3px 8px;font-size:11px;">${c.kept?'유지 중 (해제하려면 클릭)':'유지'}</button>`+
+    `<button type="button" class="danger" data-delbeforecol="${i}" style="margin-top:4px;margin-left:4px;padding:3px 8px;font-size:11px;">삭제</button></th>`);
+  html += "</tr></thead><tbody>";
+
+  // [라벨, header 필드명] -- 이제 값은 직접 수기로 고쳐 쓸 수 있는 입력창이다.
+  const metaFields = [
+    ["보험회사", "insurer"],
+    ["상품명", "productName"],
+    ["보험기간", "duration"],
+    ["납기/만기", "term"],
+    ["보험료", "premium"],
+    ["계약자", "holder"],
+  ];
+  metaFields.forEach(([label, field], mi)=>{
+    const isPremiumRow = field === "premium";
+    const totalCellAttr = isPremiumRow ? ' id="premiumTotalCell"' : "";
+    const totalText = isPremiumRow ? (()=>{ const t = sumPremiums(result.columns); return t ? t.toLocaleString()+"원" : ""; })() : "";
+    html += `<tr><td class="grouplabel stick-l0" colspan="2">${label}</td><td class="label stick-l210"${totalCellAttr}>${totalText}</td>`;
+    result.columns.forEach((c,i)=>{
+      const val = String(c.header[field]||"");
+      const inputHtml = field === "productName"
+        ? `<textarea rows="3" class="pv-meta-input" data-col="${i}" data-field="${field}" data-gridrow="${mi}" data-gridcol="${i}">${val.replace(/</g,"&lt;")}</textarea>`
+        : `<input type="text" class="pv-meta-input" data-col="${i}" data-field="${field}" data-gridrow="${mi}" data-gridcol="${i}" value="${val.replace(/"/g,"&quot;")}">`;
+      html += `<td class="meta-cell${c.kept?' kept-cell':''}" data-metacol="${i}">${inputHtml}</td>`;
+    });
+    html += "</tr>";
+  });
+
+  const numericRowDefs = ROW_DEFS.filter(([row])=>!TEXT_ROWS.has(row));
+  numericRowDefs.forEach(([row, group, item], ri)=>{
+    let sum = 0;
+    result.columns.forEach(c=> sum += (c.amounts[row]||0));
+    html += `<tr><td class="label stick-l0">${group||""}</td><td class="label stick-l60">${item}</td><td class="label stick-l210 pv-sum" data-row="${row}">${sum?sum.toLocaleString():""}</td>`;
+    result.columns.forEach((c,i)=>{
+      html += `<td><input type="number" class="pv-item-input" data-col="${i}" data-row="${row}" data-gridrow="${6+ri}" data-gridcol="${i}" value="${c.amounts[row]||""}" placeholder="0"></td>`;
+    });
+    html += `</tr>`;
+  });
+
+  html += `<tr><td class="grouplabel stick-l0" colspan="3">기타(텍스트 태그, 줄바꿈 또는 쉼표로 구분)</td>`;
+  result.columns.forEach((c,i)=> html += `<td><textarea rows="4" class="pv-etc-input" data-col="${i}" data-gridrow="${6+numericRowDefs.length}" data-gridcol="${i}">${(c.textTags||[]).join("\n").replace(/</g,"&lt;")}</textarea></td>`);
+  html += `</tr>`;
+
+  html += "</tbody>";
+  table.innerHTML = html;
+  wireExcelPaste(table);
+  wireGridEnterNav(table);
+  wireDragSelect(table);
+
+  table.querySelectorAll(".keep-btn").forEach(btn=>{
+    btn.addEventListener("click", ()=> toggleKept(Number(btn.dataset.col)));
+  });
+  table.querySelectorAll("[data-delbeforecol]").forEach(btn=>{
+    btn.addEventListener("click", ()=> deleteBeforeColumn(Number(btn.dataset.delbeforecol)));
+  });
+  table.querySelectorAll(".pv-meta-input").forEach(inp=>{
+    inp.addEventListener("input", ()=>{
+      const i = Number(inp.dataset.col);
+      const c = lastResult && lastResult.columns[i];
+      if(!c) return;
+      c.header[inp.dataset.field] = inp.value;
+      if(inp.dataset.field === "premium"){
+        const totalEl = document.getElementById("premiumTotalCell");
+        const total = sumPremiums(lastResult.columns);
+        if(totalEl) totalEl.textContent = total ? total.toLocaleString()+"원" : "";
+      }
+    });
+  });
+  table.querySelectorAll(".pv-item-input").forEach(inp=>{
+    inp.addEventListener("input", ()=>{
+      const i = Number(inp.dataset.col), row = inp.dataset.row;
+      const c = lastResult && lastResult.columns[i];
+      if(!c) return;
+      const n = parseFloat(inp.value);
+      if(!isNaN(n) && n>0) c.amounts[row] = n; else delete c.amounts[row];
+      let sum = 0;
+      table.querySelectorAll(`.pv-item-input[data-row="${row}"]`).forEach(el2=> sum += (Number(el2.value)||0));
+      const sumTd = table.querySelector(`.pv-sum[data-row="${row}"]`);
+      if(sumTd) sumTd.textContent = sum ? sum.toLocaleString() : "";
+    });
+  });
+  table.querySelectorAll(".pv-etc-input").forEach(inp=>{
+    inp.addEventListener("input", ()=>{
+      const i = Number(inp.dataset.col);
+      const c = lastResult && lastResult.columns[i];
+      if(!c) return;
+      // 줄바꿈으로 여러 줄 입력도 가능하고, 기존처럼 쉼표로 한 줄에 여러 개를 적어도 된다.
+      c.textTags = inp.value.split(/[\n,]+/).map(s=>s.trim()).filter(Boolean);
+    });
+  });
+}
+
+// 보험료 문자열("50,000원", "50000" 등)을 원본 서식이 기대하는 순수 숫자로 변환.
+// 셀 자체에 #,##0"원" 서식이 이미 걸려 있으므로 "원" 표시는 엑셀이 알아서 붙여준다.
+function parsePremiumNumber(raw){
+  const n = parseFloat(String(raw||"").replace(/,/g,"").replace(/원/g,""));
+  return isNaN(n) ? null : n;
+}
+
+// 보장분석표(전)/(후) 시트 한 장에 컬럼 데이터를 채워 넣는다.
+// 원본 엑셀 양식의 라벨/서식/합계 수식(D열)은 전혀 건드리지 않고,
+// 상품별 입력 데이터(E열부터)만 값으로 덮어써서 원본 그대로의 색깔·셀 크기·이미지를 유지한다.
+function formatDurationBreak(raw){
+  if(!raw) return raw;
+  const s = String(raw);
+  const idx = s.indexOf("~");
+  if(idx === -1) return s;
+  return s.slice(0, idx+1) + "\n" + s.slice(idx+1);
+}
+
+function fillSheetColumns(ws, columns, getField){
+  const startCol = 5; // E열
+  columns.forEach((c, i)=>{
+    const col = startCol + i;
+    ws.getCell(3, col).value = getField(c, "insurer");
+    ws.getCell(4, col).value = getField(c, "productName");
+    ws.getCell(5, col).value = formatDurationBreak(getField(c, "duration"));
+    ws.getCell(6, col).value = getField(c, "term");
+    const premiumNum = parsePremiumNumber(getField(c, "premium"));
+    ws.getCell(7, col).value = premiumNum != null ? premiumNum : (getField(c, "premium") || null);
+    ws.getCell(8, col).value = getField(c, "holder");
+
+    // 값이 없는 행도 반드시 null로 덮어써서, 원본 서식에 남아있던 수식(마스터 조회 등)이
+    // 이 컬럼에 그대로 남아있지 않도록 한다 (서식/색은 유지되고 값/수식만 교체됨).
+    const amounts = getField(c, "amounts");
+    ROW_DEFS.forEach(([row])=>{
+      if(TEXT_ROWS.has(row)) return;
+      const v = amounts[row];
+      if(v === null || v === undefined || v === ""){ ws.getCell(row, col).value = null; return; }
+      // 순수 숫자로 해석되는 값은 숫자로 써서 엑셀의 합계 수식(SUM)에 그대로 잡히게 하고,
+      // "미가입"처럼 텍스트가 섞인 값은 텍스트 그대로 써서(엑셀 SUM은 텍스트 셀을 0으로
+      // 취급해 자동으로 무시한다) 웹 화면의 "텍스트는 0으로 취급" 규칙과 결과가 일치하게 한다.
+      const n = Number(v);
+      ws.getCell(row, col).value = Number.isFinite(n) ? n : v;
+    });
+    const textVal = getField(c, "text45");
+    ws.getCell(45, col).value = textVal ? textVal : null;
+  });
+}
+
+// 셀의 채우기 색이 "유지"/자동연동 표시용 KEPT_CELL_FILL(연한 노랑, FFF6E8B5)과
+// 같은지 확인한다. "이전 보장분석표 불러오기"에서 어떤 상품이 유지 중이었는지
+// 알아내는 데 쓴다(엑셀 파일 자체에는 그 값을 별도로 저장해두지 않고, 화면에
+// 보이는 것과 똑같은 색으로만 표시해두었기 때문에 색을 보고 역으로 판단한다).
+function isKeptFillCell(cell){
+  const fill = cell && cell.style && cell.style.fill;
+  if(!fill || fill.type !== "pattern" || !fill.fgColor) return false;
+  return String(fill.fgColor.argb || "").toUpperCase() === "FFF6E8B5";
+}
+
+// fillSheetColumns()의 역방향: 이미 채워진 보장분석표(전)/(후) 시트에서
+// 상품별 컬럼 데이터를 다시 읽어낸다. "이전 보장분석표 불러오기"(저장해둔 파일을
+// 텍스트만 수정해서 다시 페이지에 불러오는 기능)에서 사용한다.
+// 연속으로 5개 열이 완전히 비어 있으면 그 뒤로는 더 이상 상품이 없다고 보고 멈춘다.
+function readColumnsFromWorksheet(ws){
+  const startCol = 5; // E열
+  const out = [];
+  let emptyStreak = 0;
+  for(let col = startCol; emptyStreak < 5; col++){
+    const insurer = cellText(ws.getCell(3, col).value);
+    const productNameCell = ws.getCell(4, col);
+    const productName = cellText(productNameCell.value);
+    const duration = cellText(ws.getCell(5, col).value).replace(/\n/g, ""); // formatDurationBreak() 역변환
+    const term = cellText(ws.getCell(6, col).value);
+    const premiumCellVal = ws.getCell(7, col).value;
+    const premium = typeof premiumCellVal === "number" ? String(premiumCellVal) : cellText(premiumCellVal);
+    const holder = cellText(ws.getCell(8, col).value);
+    // "유지"(전) 또는 자동연동(후) 상품 열은 저장 시 4~8행에 연한 노란 배경이 칠해져 있었다.
+    // 상품명 칸(4행)의 색만 확인해도 충분하다(applyKeptFillToMetaCells가 5개 행에 항상 같이 칠함).
+    const wasKept = isKeptFillCell(productNameCell);
+
+    const amounts = {};
+    let hasAmount = false;
+    ROW_DEFS.forEach(([row])=>{
+      if(TEXT_ROWS.has(row)) return;
+      const raw = ws.getCell(row, col).value;
+      if(raw === null || raw === undefined || raw === "") return;
+      // 원본 템플릿에는 웹에서 한 번도 채운 적 없는 뒤쪽 상품 칸에도 "마스터에서 별칭으로
+      // 자동완성" 하는 옛 엑셀 수식이 미리 깔려 있다(계산된 결과값 없이 수식만). 그런 셀은
+      // typeof가 "object"라 raw는 값이 있는 것처럼 보이지만, 실제 텍스트로 바꿔보면 빈 문자열이라
+      // 진짜 입력값과 구별된다 -- 빈 문자열이면 진짜 데이터가 아니므로 건너뛴다.
+      const val = typeof raw === "number" ? raw : cellText(raw);
+      if(val === "" || val === null || val === undefined) return;
+      amounts[row] = val;
+      hasAmount = true;
+    });
+    const text45 = cellText(ws.getCell(45, col).value);
+
+    const hasAny = !!(insurer || productName || duration || term || premium || holder || hasAmount || text45);
+    if(!hasAny){
+      emptyStreak++;
+      continue;
+    }
+    emptyStreak = 0;
+    out.push({ insurer, productName, duration, term, premium, holder, amounts, text45, wasKept });
+  }
+  return out;
+}
+
+// 화면에서 "유지" 표시된 상품 열의 계약정보 5개 행(4~8행: 상품명/보험기간/
+// 납기·만기/보험료/계약자)에 엑셀에서도 연한 색으로 구분해 입힌다.
+// 3행(보험사)은 원본 서식의 헤더 색을 그대로 유지하도록 건드리지 않는다.
+// (전) 시트는 kept 체크된 컬럼, (후) 시트는 전에서 유지되어 자동 연동된(carryover) 컬럼에만 적용된다.
+// 주의: ws.getCell(...).fill = X 로 바로 대입하면, 아직 서식이 손대지지 않은 셀들이 내부적으로
+// 같은 style 객체를 공유하고 있어서 의도한 셀 하나만이 아니라 같은 서식을 쓰는 다른 상품 열까지
+// 전부 색이 같이 바뀌어버렸다(신규가입 열까지 전부 색칠되던 원인). cell.style을 새 객체로
+// 통째로 교체해서 셀마다 독립된 style을 갖게 만들어 이 문제를 막는다.
+const KEPT_CELL_FILL = { type:"pattern", pattern:"solid", fgColor:{ argb:"FFF6E8B5" } };
+function applyKeptFillToMetaCells(ws, columns, isKeptFn){
+  const startCol = 5; // E열
+  columns.forEach((c, i)=>{
+    if(!isKeptFn(c)) return;
+    const col = startCol + i;
+    for(let row=4; row<=8; row++){
+      const cell = ws.getCell(row, col);
+      cell.style = Object.assign({}, cell.style, { fill: KEPT_CELL_FILL });
+    }
+  });
+}
+
+// 열 번호(1=A, 2=B, ...)를 엑셀 열 문자로 변환. 인쇄 영역 계산에 사용.
+function colLetterFromIndex(n){
+  let s = "";
+  while(n > 0){
+    const m = (n - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
+// 실제로 값이 채워진 상품 컬럼 수만큼만 인쇄 영역을 잡는다.
+// (원본 서식은 최대 9개 상품칸까지 인쇄영역이 고정되어 있어, 상품이 적으면 빈 칸이 인쇄되고
+//  9개보다 많으면 뒤쪽이 인쇄영역에서 잘리는 문제가 있었음.)
+function setPrintAreaForColumns(ws, columnCount){
+  const startCol = 5; // E열
+  const lastCol = startCol + Math.max(1, columnCount) - 1;
+  ws.pageSetup = ws.pageSetup || {};
+  ws.pageSetup.printArea = `B2:${colLetterFromIndex(lastCol)}45`;
+}
+
+/* =========================================================================
+   "표지" 시트를 이미지로 완전히 교체한다.
+   - 회원이 프로필에서 고른 관리자 등록 "스타일"(cover_styles 테이블)을 사용한다.
+     고른 적이 없으면 관리자가 지정한 기본 스타일(is_default=true)을 사용한다
+     (assets/supabase-client.js의 getMyEffectiveCoverStyle). 관리자가 스타일을
+     하나도 등록하지 않았다면 표지를 건드리지 않고 템플릿 원본을 그대로 둔다.
+   - 인쇄했을 때 A4 가로 용지에 여백 없이 정확히 꽉 차도록, 시트를 새로 만들어
+     A4 가로 크기(297mm x 210mm)에 맞춘 이미지를 앉히고 인쇄영역도 그 전체로
+     고정한다. (로컬 LibreOffice 인쇄 렌더링까지 확인해 검증한 방식.)
+   - 고객명은 스타일마다 관리자가 admin.html에서 자유롭게 지정한 위치(스타일의
+     name_x_ratio/name_y_ratio, 전체 이미지 대비 비율)에, 별도 배경 없이 텍스트만
+     캔버스에 직접 그려 이미지 픽셀에 포함시킨다(테두리/배지 박스 없이 이미지
+     위에 투명하게 얹힌 느낌). 어떤 배경 사진 위에서도 읽히도록 흰색 글자에
+     옅은 어두운 외곽선(stroke)만 준다. 표지에서만 이름 뒤에 "님"을 붙인다
+     (다른 시트의 고객명 표기에는 영향 없음).
+   ========================================================================= */
+const COVER_MM_TO_PT = 2.834645669;
+const COVER_PT_TO_PX = 96 / 72;
+const COVER_A4_W_MM = 297; // 가로(landscape)
+const COVER_A4_H_MM = 210;
+const COVER_TARGET_PT_W = COVER_A4_W_MM * COVER_MM_TO_PT;
+const COVER_TARGET_PT_H = COVER_A4_H_MM * COVER_MM_TO_PT;
+const COVER_TARGET_PX_W = Math.round(COVER_TARGET_PT_W / 0.75);
+const COVER_TARGET_PX_H = Math.round(COVER_TARGET_PT_H * COVER_PT_TO_PX);
+const COVER_NAME_FONT_NAME = "Malgun Gothic";
+
+// 고객명 텍스트 -- 박스/배지 없이 이미지 위에 바로 그린다. 글자 크기는 기본값에서
+// 시작해 이름이 길면 COVER_NAME_MAX_WIDTH_RATIO(전체 너비 대비)를 넘지 않도록
+// 자동으로 줄어든다. 어떤 사진 위에서도 읽히도록 흰 글자 + 옅은 어두운 외곽선을 쓴다.
+const COVER_NAME_FONT_SIZE_PT = 26;
+const COVER_NAME_MAX_WIDTH_RATIO = 0.6;
+const COVER_NAME_MARGIN_PX = 24; // 이미지 가장자리에서 최소 이만큼은 띄운다
+const COVER_NAME_FILL_COLOR = "#FFFFFF";
+const COVER_NAME_STROKE_COLOR = "rgba(0,0,0,0.55)";
+
+// Excel/LibreOffice가 허용하는 단일 행의 최대 높이(대략 400~409pt)보다 안전하게 낮은 값.
+// 표지 한 장 전체 높이(COVER_TARGET_PT_H, 약 595pt)가 이 한도를 넘기 때문에, 행 하나로
+// 만들면 Excel이 높이를 조용히 잘라버려 인쇄 배치가 깨진다. 그래서 넘는 만큼은 자동으로
+// 여러 행으로 쪼갠다(splitSegment). 이미지는 그 행들 전체에 걸쳐 하나로 앉힌다.
+const COVER_MAX_ROW_PT = 380;
+
+function loadImageEl(url){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = ()=> resolve(img);
+    img.onerror = ()=> reject(new Error("표지 이미지를 불러오지 못했습니다."));
+    img.src = url;
+  });
+}
+
+// 이름이 너무 길면 maxWidthPx를 넘지 않을 때까지 글자 크기를 1px씩 줄인다.
+function fitCoverNameFont(ctx, text, maxWidthPx, basePx){
+  let size = basePx;
+  ctx.font = `bold ${size}px "${COVER_NAME_FONT_NAME}", sans-serif`;
+  while(size > 10 && ctx.measureText(text).width > maxWidthPx){
+    size -= 1;
+    ctx.font = `bold ${size}px "${COVER_NAME_FONT_NAME}", sans-serif`;
+  }
+  return size;
+}
+
+// customerName 뒤에 "님"이 없으면 붙인다(표지 전용 표기 -- 다른 시트의 고객명에는
+// 적용하지 않는다).
+function withNimSuffix(name){
+  const trimmed = (name || "").trim();
+  if(!trimmed) return trimmed;
+  return /님$/.test(trimmed) ? trimmed : trimmed + "님";
+}
+
+// 표지 이미지를 A4 가로 크기(px)에 꽉 차게 그리고, nameText가 있으면 nameXRatio/
+// nameYRatio(전체 이미지 대비 0~1 비율) 위치에 배경 없이 텍스트만 그려 넣는다.
+async function buildCoverImageBuffer(imgUrl, nameText, nameXRatio, nameYRatio){
+  const img = await loadImageEl(imgUrl);
+  const canvas = document.createElement("canvas");
+  canvas.width = COVER_TARGET_PX_W;
+  canvas.height = COVER_TARGET_PX_H;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0, COVER_TARGET_PX_W, COVER_TARGET_PX_H);
+
+  if(nameText){
+    const basePx = COVER_NAME_FONT_SIZE_PT * COVER_PT_TO_PX;
+    const maxWidthPx = COVER_NAME_MAX_WIDTH_RATIO * COVER_TARGET_PX_W;
+    const fontPx = fitCoverNameFont(ctx, nameText, maxWidthPx, basePx);
+    ctx.font = `bold ${fontPx}px "${COVER_NAME_FONT_NAME}", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = Math.max(2, Math.round(fontPx * 0.12));
+
+    const textWidthPx = ctx.measureText(nameText).width;
+    const halfW = textWidthPx / 2 + COVER_NAME_MARGIN_PX;
+    const halfH = fontPx / 2 + COVER_NAME_MARGIN_PX;
+    const cx = Math.max(halfW, Math.min(COVER_TARGET_PX_W - halfW, nameXRatio * COVER_TARGET_PX_W));
+    const cy = Math.max(halfH, Math.min(COVER_TARGET_PX_H - halfH, nameYRatio * COVER_TARGET_PX_H));
+
+    ctx.strokeStyle = COVER_NAME_STROKE_COLOR;
+    ctx.strokeText(nameText, cx, cy);
+    ctx.fillStyle = COVER_NAME_FILL_COLOR;
+    ctx.fillText(nameText, cx, cy);
+  }
+
+  const blob = await new Promise((resolve, reject)=>{
+    canvas.toBlob(b => b ? resolve(b) : reject(new Error("표지 이미지 생성에 실패했습니다.")), "image/png");
+  });
+  return blob.arrayBuffer();
+}
+
+// 길이(size)가 maxSize를 넘으면 넘지 않는 여러 개의 동일한 조각으로 쪼갠다. size가
+// 거의 0이면 빈 배열.
+function splitSegment(size, maxSize){
+  if(size <= 0.5) return [];
+  if(!maxSize || size <= maxSize) return [size];
+  const n = Math.ceil(size / maxSize);
+  const each = size / n;
+  return Array(n).fill(each);
+}
+
+// wb의 기존 "표지" 시트를 통째로 지우고, A4 가로에 꽉 차는 이미지 시트로 교체한다.
+// 항상 첫 번째 시트 자리를 유지한다.
+async function replaceCoverSheetWithImage(wb, customerName){
+  const oldWs = wb.getWorksheet("표지");
+  if(!oldWs) return; // 혹시 템플릿에 표지 시트가 없으면 건드리지 않는다.
+
+  const style = await getMyEffectiveCoverStyle(currentProfile);
+  if(!style) return; // 관리자가 아직 스타일을 하나도 등록하지 않았다면 템플릿 표지를 그대로 둔다.
+
+  const nameText = withNimSuffix(customerName);
+  const imageArrayBuffer = await buildCoverImageBuffer(
+    getCoverImageUrl(style.image_path),
+    nameText,
+    Number(style.name_x_ratio),
+    Number(style.name_y_ratio)
+  );
+
+  wb.removeWorksheet(oldWs.id);
+  const ws = wb.addWorksheet("표지", {
+    pageSetup: {
+      paperSize: 9, // A4
+      orientation: "landscape",
+      margins: { left:0, right:0, top:0, bottom:0, header:0, footer:0 },
+      // 여러 방식을 시도했지만(행 높이를 A4 실제 크기에 딱 맞추기, fitToWidth/fitToHeight를
+      // 0 또는 아예 생략하기 등) 실제 Microsoft Excel에서는 계속 "인쇄 영역"(실선)과 실제
+      // 페이지 나누기 미리보기의 "점선"이 어긋나는 문제가 있었다 -- 프린터마다 다른 인쇄 불가
+      // 여백을 안전하게 예측할 방법이 없기 때문으로 보인다. 그래서 우리가 직접 크기를 딱 맞추는
+      // 대신, 엑셀 자체의 "한 페이지에 맞춤" 기능(페이지 설정 대화상자의 "확대/축소" 대신
+      // "다음 크기에 맞게 페이지 조정: 가로 1 x 세로 1")을 명시적으로 켠다. 이러면 실제 프린터의
+      // 여백이 얼마이든 상관없이 엑셀이 알아서 필요한 만큼만(거의 100%에 가깝게) 살짝 축소해서
+      // 반드시 정확히 1페이지 안에 들어가도록 계산해준다 -- 우리가 프린터 여백을 추측할 필요가
+      // 없어진다. sheetPr/pageSetUpPr에 fitToPage="1"이 함께 저장돼야 이 모드가 확실히
+      // 켜지므로 fitToPage: true를 반드시 같이 지정한다(예전에 fitToWidth/fitToHeight만
+      // 1로 남고 이 플래그가 빠져서 애매하게 해석되던 문제와는 다른 경우).
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 1,
+      horizontalCentered: true,
+      verticalCentered: true,
+    }
+  });
+
+  // 시트 표시 순서(orderNo)는 workbook.worksheets 게터가 매번 orderNo로 정렬해
+  // 새로 계산하므로, 기존 시트들 중 가장 작은 orderNo보다 작게 지정해야 맨 앞에 온다.
+  const otherOrderNos = wb.worksheets.filter(w => w !== ws).map(w => w.orderNo);
+  ws.orderNo = (otherOrderNos.length ? Math.min(...otherOrderNos) : 1) - 1;
+
+  // 엑셀에서 이 시트를 열었을 때 처음부터 "페이지 나누기 미리보기"로 보이도록 한다(실선=인쇄
+  // 영역, 점선=실제 페이지 구분선이 한눈에 같은지 바로 확인할 수 있도록).
+  ws.views = [{ style: "pageBreakPreview" }];
+
+  const MDW = 7; // Calibri 11 기준 Maximum Digit Width
+  const pxToChars = (px)=> (px * 256 / MDW - Math.floor(128 / MDW)) / 256;
+
+  // 참고: 이미지를 oneCellAnchor(셀 하나에 고정 픽셀 크기로 앉히는 방식)로 넣으면 -- 심지어
+  // 다른 셀에 아무 값도 없는 예전 방식(이미지만 있는 A1:A2)에서도 -- 로컬 LibreOffice 인쇄/PDF
+  // 변환 시 표지 시트 하나가 페이지 2개로 잘못 쪼개지는 현상이 있었다(실제 사용자가 받은
+  // 파일로도 재현 확인: 인쇄하면 이미지 맨 위 몇 픽셀만 다음 페이지에 걸쳐 나옴 -- "인쇄 영역이
+  // 꽉 차지 않고 정중앙도 아니다"라는 원래 문제의 실제 원인으로 보인다). 이미지 크기를 셀 격자
+  // 경계에서 직접 계산하는 twoCellAnchor(tl~br)로 바꾸면 이 분할이 재현되지 않아 이 방식으로
+  // 통일한다. 열은 한 칸이면 충분하지만(열 너비 최대치에 훨씬 못 미침), 행은 표지 전체
+  // 높이가 Excel의 단일 행 높이 한도를 넘으므로 여러 행으로 쪼갠다(splitSegment).
+  const rowHeightsPt = splitSegment(COVER_TARGET_PT_H, COVER_MAX_ROW_PT);
+  ws.getColumn(1).width = pxToChars(COVER_TARGET_PX_W);
+  rowHeightsPt.forEach((pt, i)=>{ ws.getRow(i + 1).height = pt; });
+
+  const totalRows = rowHeightsPt.length;
+  ws.pageSetup.printArea = `A1:A${totalRows}`;
+
+  const imgId = wb.addImage({ buffer: imageArrayBuffer, extension: "png" });
+  ws.addImage(imgId, {
+    tl: { col: 0, row: 0 },
+    br: { col: 1, row: totalRows },
+    editAs: "twoCell",
+  });
+}
+
+dlBtn.addEventListener("click", async ()=>{
+  if(!lastResult) return;
+  dlBtn.disabled = true;
+  const prevLabel = dlBtn.textContent;
+  dlBtn.textContent = "생성 중...";
+  try{
+    // 원본 서식 파일은 base64 텍스트(assets/coverage_template.b64.txt)로 보관되어 있다.
+    // GitHub 코드 편집기로 배포하는 과정에서 바이너리(.xlsx)를 직접 올릴 수 없어서
+    // 텍스트로 안전하게 저장해두고 다운로드 시점에 디코딩한다.
+    const res = await fetch("assets/coverage_template.b64.txt");
+    if(!res.ok) throw new Error("서식 파일을 불러오지 못했습니다.");
+    const b64Text = (await res.text()).replace(/\s+/g, "");
+    const binary = atob(b64Text);
+    const buf = new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++) buf[i] = binary.charCodeAt(i);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buf.buffer);
+    // 종합비교/보장차이 시트는 전/후 시트의 D열을 그대로 참조하는 수식으로 되어 있어
+    // 손대지 않아도 엑셀에서 열 때 자동으로 계산된다. fullCalcOnLoad를 다시 한 번 보장.
+    wb.calcProperties = wb.calcProperties || {};
+    wb.calcProperties.fullCalcOnLoad = true;
+
+    // 표지 시트 B3는 템플릿에 내장된 수식이 '보장분석표(전)'!C2 값을 그대로 참조해 자동 표시하므로 별도로 채울 필요 없음.
+
+    const wsBefore = wb.getWorksheet("보장분석표(전)");
+    wsBefore.getCell("C2").value = lastResult.customerName || lastResult.baseName || "";
+    fillSheetColumns(wsBefore, lastResult.columns, (c, field)=>{
+      if(field === "amounts") return c.amounts;
+      if(field === "text45") return (c.textTags && c.textTags.length) ? c.textTags.join(", ") : "";
+      return c.header[field];
+    });
+    applyKeptFillToMetaCells(wsBefore, lastResult.columns, c=>!!c.kept);
+
+    const wsAfter = wb.getWorksheet("보장분석표(후)");
+    // 보장분석표(후)의 C2는 원본 서식상 '보장분석표(전)'!C2를 그대로 참조하는 수식이라 별도로 채울 필요 없음.
+    fillSheetColumns(wsAfter, afterColumns, (c, field)=>{
+      if(field === "amounts") return c.items || {};
+      if(field === "text45") return (c.items && c.items["45"]) ? c.items["45"] : "";
+      return c[field];
+    });
+    applyKeptFillToMetaCells(wsAfter, afterColumns, c=>c.source==="carryover");
+
+    // 실제로 채워진 상품 개수만큼만 인쇄 영역을 잡아서, 인쇄 미리보기 시
+    // 빈 칸이 함께 인쇄되거나 반대로 상품이 많아 잘리는 일이 없게 한다.
+    // 단, 보장분석표(전)/(후) 모두 상품 수가 적어도 엑셀의 "보기 > 페이지 나누기 미리보기"에서
+    // 기본으로 L열(상품 8개 칸)까지는 인쇄 영역으로 잡혀 있도록 최소값을 둔다
+    // (상품이 8개보다 많으면 그만큼 더 넓게 잡힌다).
+    setPrintAreaForColumns(wsBefore, Math.max(lastResult.columns.length, 8));
+    setPrintAreaForColumns(wsAfter, Math.max(afterColumns.length, 8));
+
+    // 표지를 회원(또는 관리자가 지정한 기본) 이미지로 교체한다. 이미지가 아직 없거나
+    // 네트워크 오류로 못 불러온 경우에는 화면을 막지 않고 템플릿에 원래 있던 표지를
+    // 그대로 둔 채 나머지 다운로드는 정상 진행한다.
+    try{
+      await replaceCoverSheetWithImage(wb, lastResult.customerName || lastResult.baseName || "");
+    }catch(coverErr){
+      console.error("표지 이미지 적용 실패(기존 표지로 대체):", coverErr);
+    }
+
+    // 관리자/골드 회원이 아니면 엑셀 다운로드 1회당 포인트를 차감한다(차감액은 DB point_costs
+    // 테이블 값이며 관리자가 admin.html에서 수정할 수 있다. 실제 차감은 spend_points 함수가
+    // DB에 저장된 최신 값을 기준으로 처리하므로, 여기 화면에 보이는 coverageCost는 안내용이다).
+    // (템플릿 로딩/데이터 채우기가 모두 성공한 뒤, 실제 파일을 만들어 내려주기 직전에 차감하여
+    //  네트워크 오류 등으로 파일을 만들지 못한 경우에는 포인트가 빠지지 않도록 한다.)
+    // currentJobId가 이미 있으면(= "이전 보장분석표 불러오기"로 내 소유의 이전 작업을 이어받은
+    // 상태) 같은 작업을 이어서 받는 것이므로 포인트를 다시 차감하지 않고 최근 사용 시각만 갱신한다.
+    // currentJobId가 없으면 새 작업이므로 결제(포인트 차감)와 동시에 서버가 새 job id를 발급한다
+    // (create_coverage_job()은 실제로 포인트 차감에 성공했을 때만 job을 만들어서, 결제 없이
+    //  job id를 위조해 무료로 재다운로드를 반복하는 것을 막는다).
+    if(!freeUnlimited){
+      if(!currentJobId){
+        const newJobId = await createCoverageJob();
+        if(!newJobId){
+          alert("포인트 차감에 실패했습니다. 포인트가 부족하거나 승인 상태를 확인해주세요. (엑셀은 생성되지 않았습니다)");
+          return;
+        }
+        currentJobId = newJobId;
+      } else {
+        await touchCoverageJob(currentJobId);
+      }
+    }
+
+    // 결제(또는 이어받기)된 작업이면, 나중에 이 파일을 다시 불러왔을 때 같은 작업임을 알아볼 수
+    // 있도록 job id를 숨김 시트(엑셀 기본 UI로는 숨기기 해제가 안 되는 veryHidden)에 심어둔다.
+    // 이 값은 서버(coverage_jobs 테이블, 소유자 본인만 조회 가능한 RLS)에 대조해서만 의미가
+    // 있으므로 화면에 노출되거나 다른 사람이 값을 지어내도 악용할 수 없다.
+    if(currentJobId){
+      let hiddenWs = wb.getWorksheet("_wp_job");
+      if(!hiddenWs) hiddenWs = wb.addWorksheet("_wp_job", { state: "veryHidden" });
+      hiddenWs.getCell("A1").value = currentJobId;
+    }
+
+    const buf2 = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf2], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `${lastResult.customerName || lastResult.baseName} 보장분석표.xlsx`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }catch(err){
+    console.error(err);
+    alert("다운로드 중 오류가 발생했습니다: " + err.message);
+  }finally{
+    dlBtn.disabled = false;
+    dlBtn.textContent = prevLabel;
+  }
+});
+
+/* =========================================================================
+   매칭 엔진 (원본 SEARCH/MATCH/VLOOKUP 수식 포트) -- 후/마스터 탭 공용
+   ========================================================================= */
+function findPlanByAlias(alias, plansArr){
+  const needle = String(alias||"").trim().toLowerCase();
+  if(!needle) return null;
+  return plansArr.find(p=> String(p.plan_name||"").toLowerCase().includes(needle)) || null;
+}
+function autofillColumnFromPlan(plan){
+  if(!plan) return { insurer:"", duration:"", term:"", premium:"", holder:"", items:{} };
+  const items = {};
+  for(const [row, amt] of Object.entries(plan.items||{})){
+    // 마스터의 담보 칸은 숫자/텍스트를 모두 담을 수 있으므로, 값이 있으면(숫자든 텍스트든)
+    // 그대로 옮겨 담는다. 합산/한도 계산에서만 텍스트를 0으로 취급한다(numOrZero).
+    const s = String(amt==null?"":amt).trim();
+    if(s) items[row] = s;
+  }
+  return { insurer: plan.insurer||"", duration: plan.duration||"", term: plan.term||"",
+           premium: plan.premium||"", holder: plan.holder||"", items };
+}
+
+/* =========================================================================
+   Supabase 연동 (실제 프로젝트 - 로그인 상태 필요)
+   supabaseClient는 assets/supabase-client.js(사이트 공용 로그인 스크립트)에서
+   전역으로 이미 만들어져 있으므로 여기서 다시 만들지 않는다.
+   테스트 하네스에서 window.__mockStore가 있으면 그것을 대신 사용한다
+   (Supabase 인증 없이 매칭/자동완성 UI 로직만 검증하기 위함).
+   ========================================================================= */
+const store = window.__mockStore || {
+  async requireLogin(){
+    const { data:{ session } } = await supabaseClient.auth.getSession();
+    return session;
+  },
+  async listPlans(userId){
+    const { data, error } = await supabaseClient
+      .from("coverage_master_plans")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending:true });
+    if(error) throw error;
+    return data;
+  },
+  async savePlan(userId, plan){
+    const fields = {
+      plan_name: plan.plan_name, insurer: plan.insurer,
+      duration: plan.duration||null, term: plan.term||null,
+      premium: plan.premium||null, holder: plan.holder||null,
+      items: plan.items,
+    };
+    if(plan.id){
+      const { error } = await supabaseClient
+        .from("coverage_master_plans")
+        .update(fields)
+        .eq("id", plan.id).eq("user_id", userId);
+      if(error) throw error;
+      return { id: plan.id };
+    } else {
+      const { data, error } = await supabaseClient
+        .from("coverage_master_plans")
+        .insert({ user_id:userId, ...fields })
+        .select().single();
+      if(error) throw error;
+      return { id: data.id };
+    }
+  },
+  async deletePlan(userId, id){
+    const { error } = await supabaseClient
+      .from("coverage_master_plans").delete().eq("id", id).eq("user_id", userId);
+    if(error) throw error;
+  }
+};
+
+/* =========================================================================
+   마스터 탭 -- 엑셀 "마스터" 시트처럼 표에 바로 기입 -> 자동 저장
+   ========================================================================= */
+let currentUserId = null;
+let currentProfile = null; // 로그인한 회원의 profiles row (표지 이미지 경로 등에 사용)
+let plans = []; // [{id, plan_name, insurer, items:{...}}, ...] 마지막 열은 항상 id가 없는 빈 신규 작성용 열
+const planSaveTimers = {};
+let freeUnlimited = false; // 관리자/골드 회원은 엑셀 다운로드 포인트 차감 없이 무제한 이용
+let coverageCost = 3000; // 엑셀 다운로드 1회당 차감 포인트. 관리자가 admin.html에서 수정 가능(로그인 시 최신값으로 갱신됨)
+
+function blankPlan(){
+  return { id:null, plan_name:"", insurer:"", duration:"", term:"", premium:"", holder:"", items:{} };
+}
+// 보장분석표(전)/(후)와 동일한 계약정보 필드. plan_name(상품명/별칭) 행은 별도로
+// 그리므로 여기서는 제외하고, 나머지 5개(보험회사 포함)를 순서대로 그린다.
+// gridrow 0=plan_name, 1~5=이 목록, 6~=담보 항목 (전/후와 같은 규칙).
+const MASTER_META_FIELDS = [
+  ["보험회사", "insurer"],
+  ["보험기간", "duration"],
+  ["납기/만기", "term"],
+  ["보험료", "premium"],
+  ["계약자", "holder"],
+];
+
+function ensureTrailingBlankColumn(){
+  if(!plans.length || plans[plans.length-1].id){
+    plans.push(blankPlan());
+  }
+}
+
+function renderMasterTable(){
+  ensureTrailingBlankColumn();
+  const table = document.getElementById("masterTable");
+  let html = buildColgroupHtml([60,170], 160, plans.length);
+  html += `<thead><tr><th class="stick-l0"></th><th class="stick-l60">구분</th>`;
+  plans.forEach((p,i)=>{
+    html += `<th>${p.id ? "" : `<span style="color:var(--ink-soft);font-weight:400;">(새 플랜)</span>`}`+
+            `${p.id ? `<button class="danger" data-delcol="${i}" style="padding:2px 6px;font-size:11px;margin-left:4px;">삭제</button>` : ""}</th>`;
+  });
+  html += "</tr></thead><tbody>";
+
+  html += `<tr><td class="grouplabel stick-l0" colspan="2">상품명 / 별칭<br><span style="font-weight:400;font-size:11px;">(보장분석표(후)에서 이 안의 글자를 검색해 찾습니다)</span></td>`;
+  plans.forEach((p,i)=> html += `<td><textarea rows="3" style="resize:vertical;" data-col="${i}" data-field="plan_name" class="master-input" data-gridrow="0" data-gridcol="${i}" placeholder="예: 흥국3105&#10;(무)흥국생명다사랑...">${(p.plan_name||"").replace(/</g,"&lt;")}</textarea></td>`);
+  html += `</tr>`;
+
+  // 보장분석표(전)/(후)와 동일한 계약정보 필드 (보험회사/보험기간/납기·만기/보험료/계약자).
+  MASTER_META_FIELDS.forEach(([label, field], mi)=>{
+    html += `<tr><td class="grouplabel stick-l0" colspan="2">${label}</td>`;
+    plans.forEach((p,i)=> html += `<td><input type="text" data-col="${i}" data-field="${field}" class="master-input" data-gridrow="${1+mi}" data-gridcol="${i}" value="${String(p[field]||"").replace(/"/g,"&quot;")}"></td>`);
+    html += `</tr>`;
+  });
+
+  ROW_DEFS.forEach(([row, group, item], ri)=>{
+    html += `<tr><td class="label stick-l0">${group||""}</td><td class="label stick-l60">${item}</td>`;
+    plans.forEach((p,i)=>{
+      const raw = (p.items && p.items[row]!=null) ? p.items[row] : "";
+      // 숫자뿐 아니라 텍스트도 입력할 수 있다("미가입"/"무제한" 같은 메모성 텍스트 포함).
+      // 합산한도 계산 시에는 순수 숫자로 해석되는 값만 그대로 사용하고, 텍스트가 섞여
+      // 있으면 0으로 취급한다(numOrZero 참고). 값 자체는 입력한 그대로 저장/보존된다.
+      // "기타" 행(TEXT_ROWS)은 여러 줄(줄바꿈) 입력이 가능하도록 textarea로 그린다.
+      if(TEXT_ROWS.has(row)){
+        html += `<td><textarea rows="4" data-col="${i}" data-row="${row}" class="master-item-input" data-gridrow="${6+ri}" data-gridcol="${i}">${String(raw).replace(/</g,"&lt;")}</textarea></td>`;
+      } else {
+        html += `<td><input type="text" data-col="${i}" data-row="${row}" class="master-item-input" data-gridrow="${6+ri}" data-gridcol="${i}" value="${String(raw).replace(/"/g,"&quot;")}"></td>`;
+      }
+    });
+    html += `</tr>`;
+  });
+  html += "</tbody>";
+  table.innerHTML = html;
+  wireExcelPaste(table);
+  wireGridEnterNav(table);
+  wireDragSelect(table);
+
+  table.querySelectorAll(".master-input, .master-item-input").forEach(el=>{
+    el.addEventListener("input", ()=>{
+      const col = Number(el.dataset.col);
+      const plan = plans[col];
+      if(!plan) return;
+      if(el.dataset.field){
+        plan[el.dataset.field] = el.value;
+      } else if(el.dataset.row){
+        const row = el.dataset.row;
+        // 숫자든 텍스트든 입력한 값 그대로 저장한다. 합산/한도 계산 시에만 텍스트를 0으로
+        // 취급한다(numOrZero) -- 값 자체를 지우거나 숫자로 강제 변환하지 않는다.
+        if(el.value.trim()) plan.items[row] = el.value; else delete plan.items[row];
+      }
+      renderAfterSheet(); // 마스터를 고치는 즉시 (후) 시트 자동완성도 따라오게 (표 구조는 안 건드림)
+      schedulePlanSave(col);
+    });
+  });
+
+  table.querySelectorAll("[data-delcol]").forEach(btn=>{
+    btn.addEventListener("click", async ()=>{
+      const i = Number(btn.dataset.delcol);
+      const plan = plans[i];
+      if(!plan || !plan.id) return;
+      if(!confirm("이 플랜을 삭제할까요?")) return;
+      await store.deletePlan(currentUserId, plan.id);
+      plans.splice(i,1);
+      renderMasterTable();
+      renderAfterSheet();
+    });
+  });
+}
+
+function schedulePlanSave(col){
+  clearTimeout(planSaveTimers[col]);
+  planSaveTimers[col] = setTimeout(()=> savePlanColumn(col), 700);
+}
+
+async function savePlanColumn(col){
+  const plan = plans[col];
+  const statusEl = document.getElementById("masterStatus");
+  if(!plan || !plan.plan_name || !plan.plan_name.trim()) return; // 상품명 없는 빈 열은 저장하지 않음
+  try{
+    const result = await store.savePlan(currentUserId, {
+      id: plan.id, plan_name: plan.plan_name, insurer: plan.insurer,
+      duration: plan.duration, term: plan.term, premium: plan.premium, holder: plan.holder,
+      items: plan.items,
+    });
+    let needsRerender = false;
+    if(!plan.id && result && result.id){ plan.id = result.id; needsRerender = true; }
+    statusEl.className = "status ok";
+    statusEl.textContent = "자동 저장됨 (" + new Date().toLocaleTimeString() + ")";
+    if(needsRerender) renderMasterTable(); // 새 빈 열을 하나 더 붙이고 삭제 버튼을 활성화
+    renderAfterSheet();
+  }catch(err){
+    statusEl.className = "status err";
+    statusEl.textContent = "저장 오류: " + err.message;
+  }
+}
+
+async function refreshPlans(){
+  plans = await store.listPlans(currentUserId);
+  renderMasterTable();
+  renderAfterSheet(); // 마스터가 바뀌면 (후) 시트 자동완성도 다시 계산
+}
+
+// 관리자(wkdwlstn3@naver.com)가 등록해둔 마스터 플랜을 불러와 내 마스터 라이브러리에
+// 새 플랜으로 추가한다. 기존 내 플랜은 건드리지 않고 뒤에 이어 붙인다.
+async function importAdminMasterPlans(){
+  if(!confirm("관리자가 등록해둔 마스터 플랜을 불러와 내 마스터에 추가할까요?\n(기존 내 플랜은 그대로 유지되고, 관리자 플랜이 새 열로 추가됩니다)")) return;
+  const btn = document.getElementById("importAdminMasterBtn");
+  const statusEl = document.getElementById("masterStatus");
+  if(btn) btn.disabled = true;
+  try{
+    const adminPlans = await getAdminMasterPlans();
+    if(!adminPlans.length){
+      alert("불러올 수 있는 관리자 마스터 데이터가 없습니다.");
+      return;
+    }
+    if(plans.length && !plans[plans.length-1].id){
+      plans.pop(); // 맨 뒤 빈 신규 작성용 열은 잠시 떼어두고, 불러온 플랜들을 채운 뒤 다시 자동으로 붙는다
+    }
+    let importedCount = 0;
+    for(const p of adminPlans){
+      const newPlan = {
+        id: null,
+        plan_name: p.plan_name || "",
+        insurer: p.insurer || "",
+        duration: p.duration || "",
+        term: p.term || "",
+        premium: p.premium || "",
+        holder: p.holder || "",
+        items: p.items ? JSON.parse(JSON.stringify(p.items)) : {},
+      };
+      if(!newPlan.plan_name.trim()) continue; // 상품명 없는 플랜은 저장 규칙상 건너뜀
+      const result = await store.savePlan(currentUserId, newPlan);
+      newPlan.id = result.id;
+      plans.push(newPlan);
+      importedCount++;
+    }
+    renderMasterTable();
+    renderAfterSheet();
+    statusEl.className = "status ok";
+    statusEl.textContent = "관리자 마스터 " + importedCount + "건을 불러왔습니다 (" + new Date().toLocaleTimeString() + ")";
+  }catch(err){
+    statusEl.className = "status err";
+    statusEl.textContent = "불러오기 오류: " + err.message;
+    alert("불러오기 실패: " + err.message);
+  }finally{
+    if(btn) btn.disabled = false;
+  }
+}
+
+/* =========================================================================
+   보장분석표(후) 탭
+   - 열은 두 종류: "carryover"(보장분석표(전)에서 해지하지 않은 상품이 순서대로
+     자동 연동됨) / "manual"(마스터에서 별칭으로 불러오거나 직접 새로 적는 열).
+   - 어느 쪽이든 상품명/보험회사/각 담보 금액은 전부 직접 기입하고 고칠 수 있는
+     입력창이다. 별칭은 "불러오기 편의 기능"일 뿐 -- 매칭되면 그 순간의 값으로
+     한 번 채워주고, 그 다음부터는 자유롭게 수정 가능하고 다시 자동으로
+     덮어써지지 않는다(같은 별칭을 다시 매칭해도 마찬가지, 다른 플랜으로
+     바꿔야만 다시 불러온다).
+   - 표 구조(스켈레톤)는 열 개수가 바뀔 때만 다시 그리고, 그 외의 갱신은 값만
+     패치한다. 매 입력마다 <input>을 통째로 다시 만들면 한글 입력기(IME)
+     조합이 중간에 끊겨 "메리츠"가 "ㅁㅔㄹㅣㅊㅡ"처럼 자모로 풀려서 찍히는
+     문제가 생기기 때문이다.
+   ========================================================================= */
+// 보장분석표(전)과 동일한 계약정보 6개 필드 (보험회사/상품명/보험기간/납기·만기/보험료/계약자).
+// mi(순번)는 붙여넣기용 gridrow로도 그대로 쓰인다 -- (전) 표와 같은 규칙(0~5=계약정보, 6~=담보)이라
+// 두 표의 좌표 체계가 서로 일치한다.
+const AFTER_META_FIELDS = [
+  ["보험회사", "insurer"],
+  ["상품명", "productName"],
+  ["보험기간", "duration"],
+  ["납기/만기", "term"],
+  ["보험료", "premium"],
+  ["계약자", "holder"],
+];
+function sumAfterPremiums(list){
+  let sum = 0;
+  list.forEach(c=>{
+    const n = parseFloat(String(c.premium||"").replace(/,/g,"").replace(/원/g,""));
+    if(!isNaN(n)) sum += n;
+  });
+  return sum;
+}
+
+/* =========================================================================
+   종합비교 / 보장차이 시트 -- 보장분석표(전)/(후)에 이미 입력된 데이터만으로
+   자동 계산되는 "읽기 전용" 요약 화면. 별도 입력/저장 없음, 탭을 열 때마다
+   lastResult / afterColumns 최신값으로 다시 그린다. (원본 엑셀의
+   "종합 전.후 비교" / "3-1. 보장차이" 시트를 웹으로 옮긴 것)
+   ========================================================================= */
+function beforeRowSum(row){
+  if(!lastResult) return 0;
+  let sum = 0;
+  lastResult.columns.forEach(c=> sum += (c.amounts[row]||0));
+  return sum;
+}
+function afterRowSum(row){
+  let sum = 0;
+  afterColumns.forEach(c=> sum += numOrZero(c.items && c.items[row]));
+  return sum;
+}
+function rowLabel(row){
+  const def = ROW_DEFS.find(([r])=>r===row);
+  return def ? def[2] : "";
+}
+
+// 원본 "종합 전.후 비교" 시트의 3개 그룹 구성을 그대로 옮김 (행 번호는 ROW_DEFS와 동일)
+const SUMMARY_GROUPS = [
+  { title: "3대진단", rows: [11,12,13,14,15,16,17,18,19,20] },
+  { title: "수술비/후유장해", rows: [21,22,23,24,25,26,27,34,35] },
+  { title: "기타", rows: [28,29,42,43,44,40,36,37,38,39] },
+];
+
+function renderSummarySheet(){
+  const custName = (lastResult && lastResult.customerName) || "";
+  document.getElementById("summaryTitle").textContent = custName ? `${custName}님 보장 분석표 — 종합 전·후 비교` : "종합 전·후 비교";
+
+  const beforeTotal = lastResult ? sumPremiums(lastResult.columns) : 0;
+  const afterTotal = sumAfterPremiums(afterColumns);
+  const diff = afterTotal - beforeTotal;
+  const diffClass = diff > 0 ? "up" : (diff < 0 ? "down" : "");
+  const diffSign = diff > 0 ? "+" : "";
+  document.getElementById("summaryPremiumRow").innerHTML = `
+    <div class="summary-premium-box"><div class="lbl">총 보험료 (전)</div><div class="val">${beforeTotal ? beforeTotal.toLocaleString()+"원" : "-"}</div></div>
+    <div class="summary-premium-box"><div class="lbl">총 보험료 (후)</div><div class="val">${afterTotal ? afterTotal.toLocaleString()+"원" : "-"}</div></div>
+    <div class="summary-premium-box diff"><div class="lbl">차이 (후-전)</div><div class="val ${diffClass}">${diff ? diffSign+diff.toLocaleString()+"원" : "-"}</div></div>
+  `;
+
+  let html = "";
+  SUMMARY_GROUPS.forEach(group=>{
+    html += `<div class="summary-group"><h3>${group.title}</h3><table class="summary-table"><thead><tr><td class="item">보장</td><td>전</td><td>후</td></tr></thead><tbody>`;
+    group.rows.forEach(row=>{
+      const b = beforeRowSum(row), a = afterRowSum(row);
+      html += `<tr><td class="item">${rowLabel(row)}</td><td>${b?b.toLocaleString():""}</td><td>${a?a.toLocaleString():""}</td></tr>`;
+    });
+    html += "</tbody></table></div>";
+  });
+  document.getElementById("summaryGroups").innerHTML = html;
+}
+
+function renderDiffSheet(){
+  const table = document.getElementById("diffTable");
+  const beforeTotal = lastResult ? sumPremiums(lastResult.columns) : 0;
+  const afterTotal = sumAfterPremiums(afterColumns);
+  const numericRowDefs = ROW_DEFS.filter(([row])=>!TEXT_ROWS.has(row));
+  let html = `<thead><tr><td>구분</td><td>보장</td><td>전</td><td>후</td><td>차이</td></tr></thead><tbody>`;
+  html += `<tr><td class="grouplabel">-</td><td class="item">보험료</td><td>${beforeTotal?beforeTotal.toLocaleString():""}</td><td>${afterTotal?afterTotal.toLocaleString():""}</td>`;
+  const premDiff = afterTotal - beforeTotal;
+  html += `<td class="${premDiff>0?'diff-up':premDiff<0?'diff-down':''}">${premDiff?premDiff.toLocaleString():""}</td></tr>`;
+  numericRowDefs.forEach(([row, group, item])=>{
+    const b = beforeRowSum(row), a = afterRowSum(row);
+    const d = a - b;
+    const dCell = d ? d.toLocaleString() : "";
+    const dClass = d > 0 ? "diff-up" : (d < 0 ? "diff-down" : "");
+    html += `<tr><td class="grouplabel">${group||""}</td><td class="item">${item}</td><td>${b?b.toLocaleString():""}</td><td>${a?a.toLocaleString():""}</td><td class="${dClass}">${dCell}</td></tr>`;
+  });
+  html += "</tbody>";
+  table.innerHTML = html;
+}
+
+/* =========================================================================
+   당타사한도 체크 -- 관리자가 입력해둔 other_company_limits 데이터를 기준으로
+   (후) 표에 새로 추가한 상품(source:"manual", 신규가입)만 대상으로 한도 초과
+   가능성을 화면에 빨간 테두리/툴팁으로만 표시한다 (참고용, 저장/엑셀에는 영향 없음).
+   - 합산한도: 기존 유지 중인 금액 전체 + "이번에 새로 가입하는 모든 상품"(보험사 무관, 여러 건이면
+     전부 합산)을 더해서, 그 담보에 한도가 걸려있는 각 보험사의 max_total_limit과 비교한다.
+   - N개월이내 건수초과 / N개월이내 합산한도초과: 기본은 신규가입 건수/금액만으로 계산하되,
+     기존 유지 중인 상품 중에서도 실제 가입일(보험기간 필드의 첫 번째 날짜)이 그 한도의
+     N개월 이내인 것이 있으면 그것도 함께 포함해서 계산한다 (가입일을 알 수 없는 기존 상품은
+     제외-- 확인할 수 없는 것을 포함시키지 않는다).
+   ========================================================================= */
+let otherCompanyLimitsMap = {}; // { [보험사]: { [row]: {max_total_limit, count_limit_months, count_limit_count, amount_limit_months, amount_limit_amount} } }
+
+async function loadOtherCompanyLimits(){
+  try{
+    const { data, error } = await supabaseClient.from("other_company_limits").select("*");
+    if(error) throw error;
+    const map = {};
+    (data||[]).forEach(r=>{
+      if(!r.insurer || !r.coverage_row) return;
+      if(!map[r.insurer]) map[r.insurer] = {};
+      map[r.insurer][r.coverage_row] = {
+        max_total_limit: r.max_total_limit,
+        count_limit_months: r.count_limit_months,
+        count_limit_count: r.count_limit_count,
+        amount_limit_months: r.amount_limit_months,
+        amount_limit_amount: r.amount_limit_amount,
+      };
+    });
+    otherCompanyLimitsMap = map;
+  } catch(e){
+    console.error("당타사한도 데이터 로드 실패", e);
+    otherCompanyLimitsMap = {};
+  }
+}
+
+// "보험기간" 필드(예: "2024.01.01~2054.01.01")에서 맨 앞에 적힌 날짜(=가입일)를 최대한
+// 관대하게 추출한다. 점/하이픈/슬래시 구분자와 2~4자리 연도를 모두 허용하고, 날짜를 전혀
+// 찾을 수 없으면(예: "20년납 100세만기"처럼 순수 텍스트인 경우) null을 반환한다.
+function parseKoreanDurationStartDate(duration){
+  if(!duration) return null;
+  const s = String(duration);
+  const head = s.includes("~") ? s.split("~")[0] : s;
+  const re = /(\d{2,4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/;
+  const m = head.match(re) || s.match(re);
+  if(!m) return null;
+  let y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+  if(y < 100) y += (y < 70 ? 2000 : 1900);
+  if(mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  const dt = new Date(y, mo - 1, d);
+  if(isNaN(dt.getTime())) return null;
+  return dt;
+}
+
+// 기준일(오늘)로부터 date까지 지난 개월 수(내림, 최소 0). date가 없으면 null.
+function monthsSinceDate(date){
+  if(!date) return null;
+  const now = new Date();
+  let months = (now.getFullYear() - date.getFullYear()) * 12 + (now.getMonth() - date.getMonth());
+  if(now.getDate() < date.getDate()) months -= 1;
+  return Math.max(0, months);
+}
+
+// (후) 표 전체를 대상으로, 담보(row)별로 위반 여부를 계산한다.
+// 반환값: { "열인덱스|행번호": ["사유 설명", ...] } (열인덱스는 항상 신규가입(manual) 열)
+function computeLimitWarnings(){
+  const warnings = {};
+  if(!otherCompanyLimitsMap || !Object.keys(otherCompanyLimitsMap).length) return warnings;
+
+  const manualIdxs = [];
+  afterColumns.forEach((c,i)=>{ if(c.source === "manual") manualIdxs.push(i); });
+  const insurersWithNew = new Set();
+  manualIdxs.forEach(i=>{
+    const ins = (afterColumns[i].insurer||"").trim();
+    if(ins) insurersWithNew.add(ins);
+  });
+  if(!insurersWithNew.size) return warnings;
+
+  ROW_DEFS.forEach(([row])=>{
+    if(TEXT_ROWS.has(row)) return;
+
+    // 이 담보에 금액이 있는 신규가입 열 전체 (보험사 무관 -- 여러 보험사에 동시에
+    // 새로 가입하더라도 전부 "이번에 새로 늘어나는 총량"으로 함께 계산한다)
+    const newColsAtRow = manualIdxs.filter(i=> numOrZero(afterColumns[i].items && afterColumns[i].items[row]) > 0);
+    if(!newColsAtRow.length) return;
+    const newSumAll = newColsAtRow.reduce((s,i)=> s + numOrZero(afterColumns[i].items[row]), 0);
+    const newCountAll = newColsAtRow.length;
+
+    // 이 담보에 금액이 있는 기존 유지(carryover) 열 전체 (보험사 무관, 합산한도 계산용)
+    const keptColsAtRow = afterColumns.filter(c=> c.source === "carryover" && numOrZero(c.items && c.items[row]) > 0);
+    const existingTotal = keptColsAtRow.reduce((s,c)=> s + numOrZero(c.items[row]), 0);
+
+    insurersWithNew.forEach(insurer=>{
+      const rowLimits = otherCompanyLimitsMap[insurer];
+      if(!rowLimits) return;
+      const limit = rowLimits[row];
+      if(!limit) return;
+      // 실제로 이 보험사로 새로 가입하는 열들만 화면에 표시(빨간 테두리) 대상이 된다.
+      const ownNewCols = newColsAtRow.filter(i=> (afterColumns[i].insurer||"").trim() === insurer);
+      if(!ownNewCols.length) return;
+
+      const reasons = [];
+
+      if(limit.max_total_limit != null && (existingTotal + newSumAll) > limit.max_total_limit){
+        reasons.push(`합산한도 초과 (기존 유지 ${existingTotal.toLocaleString()}만원 + 신규가입 전체 ${newSumAll.toLocaleString()}만원 = ${(existingTotal+newSumAll).toLocaleString()}만원 > 한도 ${Number(limit.max_total_limit).toLocaleString()}만원)`);
+      }
+
+      if(limit.count_limit_count != null){
+        const recentKept = limit.count_limit_months != null
+          ? keptColsAtRow.filter(c=>{
+              const months = monthsSinceDate(parseKoreanDurationStartDate(c.duration));
+              return months != null && months <= limit.count_limit_months;
+            })
+          : [];
+        const totalCount = newCountAll + recentKept.length;
+        if(totalCount > limit.count_limit_count){
+          const monthTxt = limit.count_limit_months ? `${limit.count_limit_months}개월 이내 ` : "";
+          const keptTxt = recentKept.length ? ` + 최근 가입한 기존 ${recentKept.length}건` : "";
+          reasons.push(`${monthTxt}건수초과 (신규 ${newCountAll}건${keptTxt} = ${totalCount}건 > 한도 ${limit.count_limit_count}건)`);
+        }
+      }
+
+      if(limit.amount_limit_amount != null){
+        const recentKept = limit.amount_limit_months != null
+          ? keptColsAtRow.filter(c=>{
+              const months = monthsSinceDate(parseKoreanDurationStartDate(c.duration));
+              return months != null && months <= limit.amount_limit_months;
+            })
+          : [];
+        const recentKeptSum = recentKept.reduce((s,c)=> s + numOrZero(c.items[row]), 0);
+        const totalAmount = newSumAll + recentKeptSum;
+        if(totalAmount > limit.amount_limit_amount){
+          const monthTxt = limit.amount_limit_months ? `${limit.amount_limit_months}개월 이내 ` : "";
+          const keptTxt = recentKeptSum ? ` + 최근 가입한 기존 ${recentKeptSum.toLocaleString()}만원` : "";
+          reasons.push(`${monthTxt}합산한도초과 (신규 ${newSumAll.toLocaleString()}만원${keptTxt} = ${totalAmount.toLocaleString()}만원 > 한도 ${Number(limit.amount_limit_amount).toLocaleString()}만원)`);
+        }
+      }
+
+      if(reasons.length){
+        ownNewCols.forEach(i=>{ warnings[i+"|"+row] = reasons; });
+      }
+    });
+  });
+
+  return warnings;
+}
+
+// (후) 표의 담보 금액 입력칸에 당타사한도 초과 가능성을 빨간 테두리 + 툴팁으로만
+// 표시한다. 값 자체는 건드리지 않고, 엑셀 저장 로직(fillSheetColumns 등)과는
+// 완전히 별개로 화면 표시에만 관여하므로 엑셀 파일에는 나타나지 않는다.
+function applyLimitWarningsToDom(){
+  const table = document.getElementById("afterTable");
+  if(!table) return;
+  const warnings = computeLimitWarnings();
+  table.querySelectorAll(".af-item").forEach(inp=>{
+    const key = inp.dataset.col + "|" + inp.dataset.row;
+    const td = inp.closest("td");
+    if(!td) return;
+    const reasons = warnings[key];
+    if(reasons){
+      td.classList.add("limit-warn-cell");
+      td.title = "⚠ 당타사한도 초과 가능 (참고용, 실제 인수 여부는 각사 심사 기준에 따름)\n" + reasons.join("\n");
+    } else {
+      td.classList.remove("limit-warn-cell");
+      td.removeAttribute("title");
+    }
+  });
+}
+
+function blankAfterColumn(){
+  return { source:"manual", sourceId:null, alias:"", lastMatchedPlanId:null,
+           productName:"", insurer:"", duration:"", term:"", premium:"", holder:"", items:{} };
+}
+let afterColumns = [blankAfterColumn(), blankAfterColumn()];
+
+// 보장분석표(전)에서 "유지"를 체크한 상품만 순서대로 (후) 시트 앞쪽에 자동
+// 연동한다 (유지를 누르지 않으면 후로 넘어가지 않는다). 이미 연동돼 있던 열은
+// 사용자가 손으로 고친 내용을 보존하기 위해 다시 덮어쓰지 않고, 유지 체크가
+// 해제되었거나 사라진 상품의 열만 제거한다.
+function syncAfterCarryoverFromBefore(){
+  if(!lastResult) return;
+  const keptCols = lastResult.columns.filter(c=>c.kept);
+  const existingBySource = new Map(
+    afterColumns.filter(c=>c.source==="carryover").map(c=>[c.sourceId, c])
+  );
+  const newCarryover = keptCols.map(src=>{
+    if(existingBySource.has(src.id)) return existingBySource.get(src.id);
+    const items = { ...src.amounts };
+    if(src.textTags && src.textTags.length) items["45"] = src.textTags.join(", ");
+    return {
+      source:"carryover", sourceId: src.id, alias:"", lastMatchedPlanId:null,
+      productName: src.header.productName||"", insurer: src.header.insurer||"",
+      duration: src.header.duration||"", term: src.header.term||"",
+      premium: src.header.premium||"", holder: src.header.holder||"",
+      items,
+    };
+  });
+  const manualColumns = afterColumns.filter(c=>c.source!=="carryover");
+  afterColumns = [...newCarryover, ...manualColumns];
+  if(!afterColumns.length) afterColumns = [blankAfterColumn(), blankAfterColumn()];
+  renderAfterSheet();
+}
+
+function buildAfterSheetSkeleton(){
+  const table = document.getElementById("afterTable");
+  let html = buildColgroupHtml([60,150,90], DATA_COL_WIDTH, afterColumns.length);
+  html += `<thead><tr><th class="stick-l0"></th><th class="stick-l60">구분</th><th class="stick-l210">합계</th>`;
+  afterColumns.forEach((c,i)=>{
+    html += `<th>${String.fromCharCode(69+i)}열`;
+    html += ` <button type="button" class="danger" data-delaftercol="${i}" style="padding:2px 6px;font-size:11px;">삭제</button>`;
+    html += `</th>`;
+  });
+  html += "</tr></thead><tbody>";
+
+  html += `<tr><td class="grouplabel stick-l0" colspan="3">플랜 별칭 / 출처</td>`;
+  afterColumns.forEach((c,i)=>{
+    if(c.source === "carryover"){
+      html += `<td style="font-size:11px;color:var(--ink-soft);">전 탭에서 유지 중인 상품<br>(자동 연동, 아래 값은 직접 수정 가능)</td>`;
+    } else {
+      html += `<td><input type="text" class="col-alias" data-col="${i}" value="${(c.alias||"").replace(/"/g,"&quot;")}" placeholder="별칭 입력 (마스터에서 불러오기)"></td>`;
+    }
+  });
+  html += `</tr>`;
+
+  // 보장분석표(전)과 같은 계약정보 6개 행. "보험료" 행에는 (전)과 동일한 방식의
+  // 총보험료 합계가 붙는다.
+  AFTER_META_FIELDS.forEach(([label, field], mi)=>{
+    const isPremiumRow = field === "premium";
+    const totalCellAttr = isPremiumRow ? ' id="afterPremiumTotalCell"' : "";
+    const totalText = isPremiumRow ? (()=>{ const t = sumAfterPremiums(afterColumns); return t ? t.toLocaleString()+"원" : ""; })() : "";
+    html += `<tr><td class="grouplabel stick-l0" colspan="2">${label}</td><td class="label stick-l210"${totalCellAttr}>${totalText}</td>`;
+    afterColumns.forEach((c,i)=>{
+      const val = String(c[field]||"");
+      const metaCellClass = `meta-cell${c.source==='carryover'?' kept-cell':''}`;
+      if(field === "productName"){
+        html += `<td class="${metaCellClass}" data-metacol="${i}"><textarea rows="3" class="af-productname" data-col="${i}" data-gridrow="${mi}" data-gridcol="${i}">${val.replace(/</g,"&lt;")}</textarea></td>`;
+      } else {
+        html += `<td class="${metaCellClass}" data-metacol="${i}"><input type="text" class="af-meta-input" data-col="${i}" data-field="${field}" data-gridrow="${mi}" data-gridcol="${i}" value="${val.replace(/"/g,"&quot;")}"></td>`;
+      }
+    });
+    html += `</tr>`;
+  });
+
+  ROW_DEFS.forEach(([row, group, item], ri)=>{
+    html += `<tr><td class="label stick-l0">${group||""}</td><td class="label stick-l60">${item}</td><td class="label stick-l210 af-sum" data-row="${row}"></td>`;
+    afterColumns.forEach((c,i)=>{
+      const raw = (c.items && c.items[row]!=null) ? c.items[row] : "";
+      // 마스터와 마찬가지로 숫자/텍스트를 모두 입력할 수 있다. 합계/한도 계산은 numOrZero로
+      // 텍스트를 0으로 취급한다. "기타" 행(TEXT_ROWS)은 여러 줄(줄바꿈) 입력이 가능하도록
+      // textarea로 그린다.
+      if(TEXT_ROWS.has(row)){
+        html += `<td><textarea rows="4" class="af-item" data-col="${i}" data-row="${row}" data-gridrow="${6+ri}" data-gridcol="${i}">${String(raw).replace(/</g,"&lt;")}</textarea></td>`;
+      } else {
+        html += `<td><input type="text" class="af-item" data-col="${i}" data-row="${row}" data-gridrow="${6+ri}" data-gridcol="${i}" value="${String(raw).replace(/"/g,"&quot;")}"></td>`;
+      }
+    });
+    html += `</tr>`;
+  });
+
+  html += "</tbody>";
+  table.innerHTML = html;
+  wireExcelPaste(table);
+  wireGridEnterNav(table);
+  wireDragSelect(table);
+
+  table.querySelectorAll(".col-alias").forEach(inp=>{
+    inp.addEventListener("input", ()=>{
+      const i = Number(inp.dataset.col);
+      const col = afterColumns[i];
+      if(!col) return;
+      col.alias = inp.value;
+      // 값만 다시 계산해서 채워 넣는다 -- 별칭 <input> 자체는 다시 만들지 않으므로
+      // 한글 조합(IME) 도중에 재생성돼서 끊기는 일이 없다.
+      const savedPlans = plans.filter(p=>p.id);
+      const match = findPlanByAlias(col.alias, savedPlans);
+      if(match && match.id !== col.lastMatchedPlanId){
+        const resolved = autofillColumnFromPlan(match);
+        col.productName = match.plan_name || "";
+        col.insurer = resolved.insurer || "";
+        col.duration = resolved.duration || "";
+        col.term = resolved.term || "";
+        col.premium = resolved.premium || "";
+        col.holder = resolved.holder || "";
+        col.items = { ...resolved.items };
+        col.lastMatchedPlanId = match.id;
+        applyColumnValuesToDom(i);
+      }
+    });
+  });
+  table.querySelectorAll(".af-productname").forEach(inp=>{
+    inp.addEventListener("input", ()=>{
+      const col = afterColumns[Number(inp.dataset.col)];
+      if(col) col.productName = inp.value;
+    });
+  });
+  table.querySelectorAll(".af-meta-input").forEach(inp=>{
+    inp.addEventListener("input", ()=>{
+      const col = afterColumns[Number(inp.dataset.col)];
+      if(!col) return;
+      col[inp.dataset.field] = inp.value;
+      if(inp.dataset.field === "premium"){
+        const totalEl = document.getElementById("afterPremiumTotalCell");
+        const total = sumAfterPremiums(afterColumns);
+        if(totalEl) totalEl.textContent = total ? total.toLocaleString()+"원" : "";
+      }
+      if(inp.dataset.field === "insurer") applyLimitWarningsToDom();
+    });
+  });
+  table.querySelectorAll(".af-item").forEach(inp=>{
+    inp.addEventListener("input", ()=>{
+      const i = Number(inp.dataset.col), row = inp.dataset.row;
+      const col = afterColumns[i];
+      if(!col) return;
+      if(inp.value.trim()) col.items[row] = inp.value; else delete col.items[row];
+      recomputeAfterRowSum(row);
+      applyLimitWarningsToDom();
+    });
+  });
+  table.querySelectorAll("[data-delaftercol]").forEach(btn=>{
+    btn.addEventListener("click", ()=> deleteAfterColumn(Number(btn.dataset.delaftercol)));
+  });
+
+  ROW_DEFS.forEach(([row])=> recomputeAfterRowSum(row));
+  applyLimitWarningsToDom();
+}
+
+// 열 개수는 그대로인 채로 값만 갱신할 때 쓴다 (별칭 매칭으로 자동완성됐을 때 등).
+// 이미 입력창에 표시된 값과 같으면 건드리지 않아서, 지금 타이핑 중인 다른
+// 입력창의 커서 위치에는 영향이 없다.
+function applyColumnValuesToDom(i){
+  const table = document.getElementById("afterTable");
+  if(!table) return;
+  const col = afterColumns[i];
+  if(!col) return;
+  const pn = table.querySelector(`.af-productname[data-col="${i}"]`);
+  if(pn && pn.value !== (col.productName||"")) pn.value = col.productName||"";
+  table.querySelectorAll(`.af-meta-input[data-col="${i}"]`).forEach(inp=>{
+    const field = inp.dataset.field;
+    const v = col[field] || "";
+    if(inp.value !== v) inp.value = v;
+  });
+  const totalEl = document.getElementById("afterPremiumTotalCell");
+  if(totalEl){ const t = sumAfterPremiums(afterColumns); totalEl.textContent = t ? t.toLocaleString()+"원" : ""; }
+  table.querySelectorAll(`.af-item[data-col="${i}"]`).forEach(inp=>{
+    const row = inp.dataset.row;
+    const v = (col.items && col.items[row]!=null) ? col.items[row] : "";
+    if(String(inp.value) !== String(v)) inp.value = v;
+    recomputeAfterRowSum(row);
+  });
+  applyLimitWarningsToDom();
+}
+
+function recomputeAfterRowSum(row){
+  const table = document.getElementById("afterTable");
+  if(!table) return;
+  const sumTd = table.querySelector(`.af-sum[data-row="${row}"]`);
+  if(!sumTd) return;
+  if(TEXT_ROWS.has(Number(row))){ sumTd.textContent = ""; return; }
+  let sum = 0;
+  table.querySelectorAll(`.af-item[data-row="${row}"]`).forEach(inp=> sum += (Number(inp.value)||0));
+  sumTd.textContent = sum ? sum.toLocaleString() : "";
+}
+
+function renderAfterSheet(){
+  const table = document.getElementById("afterTable");
+  if(!table) return;
+  // 열 개수가 바뀌었을 때(추가/삭제/전 탭과 동기화)만 표 구조를 다시 그린다.
+  // 그 외의 호출은 각 열의 상태를 DOM에 patch만 해서 <input> 재생성/포커스
+  // 유실을 피한다.
+  const currentCols = table.querySelectorAll(".af-productname").length;
+  if(currentCols !== afterColumns.length){
+    buildAfterSheetSkeleton();
+  } else {
+    afterColumns.forEach((c,i)=> applyColumnValuesToDom(i));
+  }
+}
+
+document.getElementById("addColBtn").addEventListener("click", ()=>{
+  afterColumns.push(blankAfterColumn());
+  renderAfterSheet();
+});
+
+/* =========================================================================
+   시트 탭 전환 (엑셀 시트 탭처럼 보장분석표(전)/(후)/마스터를 선택해서 봄)
+   ========================================================================= */
+document.querySelectorAll(".sheettab").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll(".sheettab").forEach(b=>b.classList.remove("active"));
+    document.querySelectorAll(".sheetpanel").forEach(p=>p.style.display="none");
+    btn.classList.add("active");
+    document.getElementById("sheet-"+btn.dataset.sheet).style.display = "block";
+    // 종합비교/보장차이는 입력이 없는 읽기전용 요약이라, 탭을 열 때마다
+    // 보장분석표(전)/(후)의 최신 데이터로 다시 계산해서 그린다.
+    if(btn.dataset.sheet === "summary") renderSummarySheet();
+    if(btn.dataset.sheet === "diff") renderDiffSheet();
+  });
+});
+
+/* =========================================================================
+   로그인 -- 사이트 공용 로그인(assets/supabase-client.js)을 그대로 사용한다.
+   세션이 없으면 requireLogin()이 자동으로 login.html로 이동시키므로,
+   이 페이지 자체에는 별도의 로그인 폼이 필요 없다.
+   ========================================================================= */
+(async ()=>{
+  const session = await requireLogin(); // 세션 없으면 여기서 login.html로 리다이렉트되고 아래 코드는 실행되지 않음
+  if(!session) return;
+  currentUserId = session.user.id;
+
+  // 관리자/골드 회원은 엑셀 다운로드 시 포인트 차감 없이 무제한 이용.
+  // 일반 회원은 다운로드 버튼에 차감될 포인트를 표시해준다.
+  const myProfile = await getMyProfile();
+  currentProfile = myProfile;
+  freeUnlimited = !!myProfile && (myProfile.role === 'admin' || myProfile.role === 'gold');
+  if(!freeUnlimited){
+    const costs = await getPointCosts(); // 관리자가 admin.html에서 수정한 최신 차감 포인트를 읽어온다
+    coverageCost = costs.coverage;
+    dlBtn.textContent = dlBtn.textContent + " · " + coverageCost.toLocaleString() + "P";
+  }
+
+  await loadOtherCompanyLimits();
+  await refreshPlans();
+})();
+
+document.getElementById("logoutLink").addEventListener("click", async (e)=>{
+  e.preventDefault();
+  await logout();
+});
+
+document.getElementById("importAdminMasterBtn").addEventListener("click", importAdminMasterPlans);
+</script>
+</body>
+</html>
