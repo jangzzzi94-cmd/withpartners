@@ -68,7 +68,13 @@
       </div>
       <div class="field">
         <label>생년월일</label>
-        <input type="date" id="birth">
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="birthY" placeholder="YYYY" maxlength="4" inputmode="numeric" style="width:80px;text-align:center;">
+          <span style="color:var(--ink-soft);">-</span>
+          <input type="text" id="birthM" placeholder="MM" maxlength="2" inputmode="numeric" style="width:54px;text-align:center;">
+          <span style="color:var(--ink-soft);">-</span>
+          <input type="text" id="birthD" placeholder="DD" maxlength="2" inputmode="numeric" style="width:54px;text-align:center;">
+        </div>
       </div>
       <div class="field">
         <label>이메일</label>
@@ -94,12 +100,27 @@
     el.className = 'msg show ' + (ok ? 'ok' : 'err');
   }
 
+  document.getElementById('birthY').addEventListener('input', function(){
+    this.value = this.value.replace(/[^0-9]/g, '');
+    if(this.value.length >= 4) document.getElementById('birthM').focus();
+  });
+  document.getElementById('birthM').addEventListener('input', function(){
+    this.value = this.value.replace(/[^0-9]/g, '');
+    if(this.value.length >= 2) document.getElementById('birthD').focus();
+  });
+  document.getElementById('birthD').addEventListener('input', function(){
+    this.value = this.value.replace(/[^0-9]/g, '');
+  });
+
   document.getElementById('signupBtn').addEventListener('click', async ()=>{
     const name = document.getElementById('name').value.trim();
-    const birth = document.getElementById('birth').value;
+    const y = document.getElementById('birthY').value.trim();
+    const m = document.getElementById('birthM').value.trim();
+    const d = document.getElementById('birthD').value.trim();
+    if(!name || y.length !== 4 || !m || !d){ showMsg('이름과 생년월일을 정확히 입력하세요.'); return; }
+    const birth = y + '-' + m.padStart(2,'0') + '-' + d.padStart(2,'0');
     const email = document.getElementById('email').value.trim();
     const password = document.getElementById('password').value;
-    if(!name || !birth){ showMsg('이름과 생년월일을 입력하세요.'); return; }
     if(!email || !password){ showMsg('이메일과 비밀번호를 입력하세요.'); return; }
     if(password.length < 8){ showMsg('비밀번호는 8자 이상이어야 합니다.'); return; }
 
