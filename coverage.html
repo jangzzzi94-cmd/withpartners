@@ -374,6 +374,19 @@ function undoLastDelete(){
   const entry = deleteHistory.pop();
   updateUndoButtons();
   if(!entry) return;
+  if(entry.kind === "cells"){
+    // 드래그(또는 Shift+방향키)로 지운 범위를 그대로 되살린다.
+    const table = document.getElementById(entry.tableId);
+    if(!table) return;
+    entry.cells.forEach(([r, c, v])=>{
+      const el = table.querySelector('[data-gridrow="'+r+'"][data-gridcol="'+c+'"]');
+      if(!el) return;
+      el.value = v;
+      el.dispatchEvent(new Event("input", {bubbles:true}));
+      el.dispatchEvent(new Event("change", {bubbles:true}));
+    });
+    return;
+  }
   if(entry.kind === "before"){
     if(!lastResult) return;
     const idx = Math.min(entry.index, lastResult.columns.length);
@@ -403,7 +416,13 @@ document.addEventListener("keydown", (e)=>{
   const isUndoKey = (e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === "z" || e.key === "Z");
   if(!isUndoKey) return;
   const tag = (document.activeElement && document.activeElement.tagName) || "";
-  if(tag === "INPUT" || tag === "TEXTAREA") return;
+  // 범위를 지운 직후에는 보통 그 표의 입력칸에 포커스가 남아 있다. 프로그램이 값을 지운 것은
+  // 브라우저의 타이핑 되돌리기 대상이 아니어서 그냥 두면 아무 일도 일어나지 않으므로,
+  // 방금 지운 범위가 지금 포커스가 있는 표의 것이라면 우리가 직접 되돌린다.
+  const top = deleteHistory[deleteHistory.length - 1];
+  const inSameTable = !!(top && top.kind === "cells" && document.activeElement
+    && document.activeElement.closest && document.activeElement.closest("#" + top.tableId));
+  if((tag === "INPUT" || tag === "TEXTAREA") && !inSameTable) return;
   e.preventDefault();
   undoLastDelete();
 });
@@ -439,6 +458,8 @@ function wireGridEnterNav(container){
     // 커서가 맨 앞(위로 갈 때)이나 맨 끝(아래로 갈 때)에 있을 때만 칸을 옮긴다.
     // number 입력창은 위/아래가 값을 1씩 올리고 내리는 기본 동작이 있는데, 표에서는
     // 그 동작이 오히려 값을 잘못 바꾸므로 막고 이동으로 쓴다.
+    // Shift + 방향키는 범위 선택용이므로 여기서는 이동시키지 않는다 (wireDragSelect 가 처리)
+    if(e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "ArrowLeft" || e.key === "ArrowRight")) return;
     if(e.key === "ArrowUp" || e.key === "ArrowDown"){
       const dr = e.key === "ArrowUp" ? -1 : 1;
       if(tag === "TEXTAREA"){
@@ -533,7 +554,39 @@ function wireDragSelect(container){
     e.clipboardData.setData("text/plain", tsv);
     e.preventDefault();
   });
-  // 드래그로 범위를 선택한 상태에서 Delete(또는 Backspace)를 누르면 그 범위의 값을
+  // 키보드로 범위 선택 -- Shift + 방향키를 누르면 마우스로 드래그한 것과 똑같이 범위가 잡힌다.
+  // 기준칸(kbAnchor)은 Shift를 처음 누른 자리이고, 방향키를 누를 때마다 반대쪽 끝(kbHead)이
+  // 움직인다. 잡아둔 범위는 복사(Ctrl+C)와 삭제(Delete)에 그대로 쓰인다.
+  // Shift 없이 방향키를 누르면 선택이 풀린다(엑셀과 동일).
+  let kbAnchor = null;
+  let kbHead = null;
+  const ARROW_DELTA = { ArrowUp:[-1,0], ArrowDown:[1,0], ArrowLeft:[0,-1], ArrowRight:[0,1] };
+  container.addEventListener("keydown", (e)=>{
+    const delta = ARROW_DELTA[e.key];
+    if(!delta) return;
+    const cur = cellAt(e.target);
+    if(!cur) return;
+    if(!e.shiftKey){
+      kbAnchor = null; kbHead = null;
+      if(selection){ selection = null; clearHighlight(); }
+      return;
+    }
+    // 선택이 없던 상태(또는 다른 곳을 클릭해 풀린 상태)면 지금 칸을 기준으로 새로 잡는다
+    if(!kbAnchor || !kbHead || !selection){ kbAnchor = cur; kbHead = cur; }
+    const nextRow = kbHead.row + delta[0];
+    const nextCol = kbHead.col + delta[1];
+    const nextEl = container.querySelector('[data-gridrow="'+nextRow+'"][data-gridcol="'+nextCol+'"]');
+    if(!nextEl){ e.preventDefault(); return; } // 표 끝에서는 더 늘어나지 않는다
+    kbHead = { row: nextRow, col: nextCol };
+    selection = { r1:kbAnchor.row, c1:kbAnchor.col, r2:kbHead.row, c2:kbHead.col };
+    highlightRange(selection.r1, selection.c1, selection.r2, selection.c2);
+    nextEl.focus();
+    if(nextEl.setSelectionRange && nextEl.type !== "number"){
+      try{ nextEl.setSelectionRange(nextEl.value.length, nextEl.value.length); }catch(err){}
+    }
+    e.preventDefault();
+  });
+  // 드래그(또는 Shift+방향키)로 범위를 선택한 상태에서 Delete(또는 Backspace)를 누르면 그 범위의 값을
   // 한 번에 지운다. 지운 뒤에도 선택 표시는 그대로 남는다(엑셀과 동일).
   // 그냥 한 칸만 클릭했을 때는 범위(selection)가 만들어지지 않으므로, 평소처럼
   // 그 칸 안에서 글자 하나씩 지우는 기본 동작이 그대로 유지된다.
@@ -543,10 +596,12 @@ function wireDragSelect(container){
     const rowMin=Math.min(selection.r1,selection.r2), rowMax=Math.max(selection.r1,selection.r2);
     const colMin=Math.min(selection.c1,selection.c2), colMax=Math.max(selection.c1,selection.c2);
     let cleared = 0;
+    const before = []; // 되돌리기용 - 지우기 직전 값
     for(let r=rowMin;r<=rowMax;r++){
       for(let c=colMin;c<=colMax;c++){
         const el = container.querySelector('[data-gridrow="'+r+'"][data-gridcol="'+c+'"]');
         if(!el || el.value === "") continue;
+        before.push([r, c, el.value]);
         el.value = "";
         // 화면 값만 바꾸는 게 아니라, 각 표가 값 변경을 감지해서 상태 저장/합계 갱신까지
         // 하도록 실제 입력과 똑같은 이벤트를 발생시킨다.
@@ -555,7 +610,10 @@ function wireDragSelect(container){
         cleared++;
       }
     }
-    if(cleared) e.preventDefault();
+    if(cleared){
+      pushDeleteHistory({ kind:"cells", tableId: container.id, cells: before });
+      e.preventDefault();
+    }
   });
 }
 
