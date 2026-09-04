@@ -533,6 +533,30 @@ function wireDragSelect(container){
     e.clipboardData.setData("text/plain", tsv);
     e.preventDefault();
   });
+  // 드래그로 범위를 선택한 상태에서 Delete(또는 Backspace)를 누르면 그 범위의 값을
+  // 한 번에 지운다. 지운 뒤에도 선택 표시는 그대로 남는다(엑셀과 동일).
+  // 그냥 한 칸만 클릭했을 때는 범위(selection)가 만들어지지 않으므로, 평소처럼
+  // 그 칸 안에서 글자 하나씩 지우는 기본 동작이 그대로 유지된다.
+  container.addEventListener("keydown", (e)=>{
+    if(e.key !== "Delete" && e.key !== "Backspace") return;
+    if(!selection) return;
+    const rowMin=Math.min(selection.r1,selection.r2), rowMax=Math.max(selection.r1,selection.r2);
+    const colMin=Math.min(selection.c1,selection.c2), colMax=Math.max(selection.c1,selection.c2);
+    let cleared = 0;
+    for(let r=rowMin;r<=rowMax;r++){
+      for(let c=colMin;c<=colMax;c++){
+        const el = container.querySelector('[data-gridrow="'+r+'"][data-gridcol="'+c+'"]');
+        if(!el || el.value === "") continue;
+        el.value = "";
+        // 화면 값만 바꾸는 게 아니라, 각 표가 값 변경을 감지해서 상태 저장/합계 갱신까지
+        // 하도록 실제 입력과 똑같은 이벤트를 발생시킨다.
+        el.dispatchEvent(new Event("input", {bubbles:true}));
+        el.dispatchEvent(new Event("change", {bubbles:true}));
+        cleared++;
+      }
+    }
+    if(cleared) e.preventDefault();
+  });
 }
 
 function normalizeSpace(s){ return String(s==null?"":s).replace(/ /g," ").replace(/\s+/g," ").trim(); }
