@@ -25,11 +25,9 @@
 <a href="dashboard.html" class="brand">With <span>Partner</span></a>
 <nav><a href="dashboard.html">대시보드</a><a href="#" id="logoutLink">로그아웃</a></nav>
 </div>
-
 <div class="dash-wrap">
 <h1>프로필</h1>
 <p class="sub">내 정보를 확인하고 비밀번호를 변경할 수 있습니다.</p>
-
 <div class="auth-card" style="max-width:100%;padding:24px 22px;margin-bottom:24px;">
   <div class="profile-grid" id="profileInfo">
     <div class="loading">불러오는 중…</div>
@@ -47,7 +45,6 @@
   </div>
   <div class="msg" id="infoMsg"></div>
 </div>
-
 <div class="auth-card" style="max-width:100%;padding:24px 22px;margin-bottom:24px;">
   <h3 style="margin:0 0 12px;font-size:15px;">비밀번호 변경</h3>
   <div class="pw-row">
@@ -56,13 +53,19 @@
   </div>
   <div class="msg" id="pwMsg"></div>
 </div>
-
+<div class="auth-card" style="max-width:100%;padding:24px 22px;margin-bottom:24px;">
+  <h3 style="margin:0 0 8px;font-size:15px;">마스터 공유</h3>
+  <p class="sub" style="margin-bottom:14px;">켜두면 다른 회원이 <strong>내 이메일 주소로 검색</strong>해서 보장분석표 마스터 시트의 내 플랜을 자신의 마스터로 복사해 갈 수 있습니다. 복사본이므로 상대방이 고쳐도 내 마스터는 바뀌지 않습니다. 꺼두면 검색 자체가 되지 않습니다. (기본값: 꺼짐)</p>
+  <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;font-weight:600;">
+    <input type="checkbox" id="shareMasterToggle" style="cursor:pointer;width:16px;height:16px;">
+    내 마스터를 다른 회원에게 공유
+  </label>
+  <div class="msg" id="shareMasterMsg"></div>
+</div>
 <div class="auth-card" style="max-width:100%;padding:24px 22px;" id="coverSection">
   <h3 style="margin:0 0 8px;font-size:15px;">보장분석표 표지 스타일</h3>
   <p class="sub" style="margin-bottom:14px;">아래에서 사용할 스타일을 고르거나, 내 표지 이미지를 직접 올려서 나만의 스타일을 만들 수 있습니다.</p>
-
   <div id="allStylesWrap" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:24px;">불러오는 중...</div>
-
   <div style="border-top:1px solid var(--line);padding-top:18px;">
     <h4 id="myStyleEditorTitle" style="font-size:14px;margin:0 0 12px;">내 스타일 추가</h4>
     <div class="field">
@@ -88,35 +91,29 @@
     <div class="msg" id="myStyleMsg"></div>
   </div>
 </div>
-
 <div class="danger-zone">
   <h3 style="margin:0 0 8px;font-size:14px;color:#a94136;">회원 탈퇴</h3>
   <p class="sub" style="margin-bottom:12px;">탈퇴하면 보유 크레딧을 포함한 모든 정보가 삭제되며 되돌릴 수 없습니다.</p>
   <button type="button" class="btn-ghost" id="deleteAccountBtn" style="color:#a94136;border-color:#e0a89e;">회원 탈퇴</button>
 </div>
 </div>
-
 <script src="assets/supabase-client.js"></script>
 <script>
   let myProfile = null;
-
   function fmtDate(iso){
     if(!iso) return '-';
     return String(iso).slice(0,10);
   }
-
   async function init(){
     const session = await requireLogin();
     if(!session) return;
     myProfile = await getMyProfile();
     if(!myProfile) return;
-
     if(myProfile.suspended){
       alert('이 계정은 정지되었습니다.');
       await logout();
       return;
     }
-
     document.getElementById('profileInfo').innerHTML = `
       <div class="profile-item"><div class="lbl">이메일</div><div class="val">${myProfile.email||''}</div></div>
       <div class="profile-item"><div class="lbl">닉네임</div><div class="val">${myProfile.nickname||''}</div></div>
@@ -125,10 +122,41 @@
     `;
     document.getElementById('editName').value = myProfile.name || '';
     document.getElementById('editBirth').value = myProfile.birth || '';
-
+    await initShareMasterToggle();
     await loadAllStyles();
   }
-
+  /* ============================ 마스터 공유 켜기/끄기 ============================ */
+  async function initShareMasterToggle(){
+    const toggle = document.getElementById('shareMasterToggle');
+    const msg = document.getElementById('shareMasterMsg');
+    if(typeof getMyMasterSharing !== 'function' || typeof setMyMasterSharing !== 'function'){
+      msg.className = 'msg err show';
+      msg.textContent = '공유 설정 기능을 불러올 수 없습니다.';
+      toggle.disabled = true;
+      return;
+    }
+    try{
+      toggle.checked = await getMyMasterSharing();
+    }catch(err){
+      console.error(err);
+    }
+    toggle.addEventListener('change', async ()=>{
+      const want = toggle.checked;
+      toggle.disabled = true;
+      const ok = await setMyMasterSharing(want);
+      toggle.disabled = false;
+      if(!ok){
+        toggle.checked = !want;
+        msg.className = 'msg err show';
+        msg.textContent = '설정 저장에 실패했습니다.';
+        return;
+      }
+      msg.className = 'msg ok show';
+      msg.textContent = want
+        ? '공유를 켰습니다. 다른 회원이 내 이메일(' + (myProfile.email||'') + ')로 내 마스터를 불러갈 수 있습니다.'
+        : '공유를 껐습니다. 이제 내 이메일로 검색되지 않습니다.';
+    });
+  }
   /* ============================ 표지 스타일: 선택 목록 ============================ */
   async function loadAllStyles(){
     const wrap = document.getElementById('allStylesWrap');
@@ -181,7 +209,6 @@
       wrap.appendChild(card);
     });
   }
-
   /* ============================ 내 스타일 추가/수정 (드래그 위치 지정) ============================ */
   let editingMyStyleId = null;
   let pendingMyStyleFile = null;
@@ -191,7 +218,6 @@
   const MY_BADGE_H_PT = 60;
   const MY_A4_H_PT = 210 * 2.834645669;
   const MY_BADGE_H_RATIO = MY_BADGE_H_PT / MY_A4_H_PT;
-
   function clampMyRatio(x, y){
     const halfW = MY_BADGE_W_RATIO / 2, halfH = MY_BADGE_H_RATIO / 2;
     return { x: Math.max(halfW, Math.min(1 - halfW, x)), y: Math.max(halfH, Math.min(1 - halfH, y)) };
@@ -284,7 +310,6 @@
     resetMyStyleEditor();
     await loadAllStyles();
   });
-
   document.getElementById('saveInfoBtn').addEventListener('click', async ()=>{
     const name = document.getElementById('editName').value.trim();
     const birth = document.getElementById('editBirth').value || null;
@@ -294,7 +319,6 @@
     myProfile.name = name; myProfile.birth = birth;
     msg.textContent = '저장되었습니다.'; msg.className = 'msg ok show';
   });
-
   document.getElementById('changePwBtn').addEventListener('click', async ()=>{
     const pw = document.getElementById('newPassword').value;
     const msg = document.getElementById('pwMsg');
@@ -304,19 +328,16 @@
     msg.textContent = '비밀번호가 변경되었습니다.'; msg.className='msg ok show';
     document.getElementById('newPassword').value = '';
   });
-
   document.getElementById('deleteAccountBtn').addEventListener('click', async ()=>{
     if(!confirm('정말로 회원 탈퇴하시겠습니까? 되돌릴 수 없습니다.')) return;
     const result = await deleteMyAccount();
     if(!result.ok){ alert('탈퇴 실패: ' + result.message); return; }
     window.location.href = 'login.html';
   });
-
   document.getElementById('logoutLink').addEventListener('click', async (e)=>{
     e.preventDefault();
     await logout();
   });
-
   init();
 </script>
 </body>
