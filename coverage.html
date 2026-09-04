@@ -211,9 +211,21 @@ table.summary-table thead td{font-weight:700;background:#f2f4f8;color:var(--ink-
     <div class="row" style="justify-content:space-between;">
       <h2>마스터 — 내 플랜 라이브러리</h2>
       <div style="display:flex;align-items:center;gap:10px;">
-        <button id="importAdminMasterBtn" class="secondary" type="button" style="font-size:12px;padding:7px 12px;">📥 관리자 마스터 불러오기</button>
+        <button id="importMemberMasterBtn" class="secondary" type="button" style="font-size:12px;padding:7px 12px;">📥 다른 회원 마스터 불러오기</button>
         <div class="status" id="masterStatus" style="margin:0;"></div>
       </div>
+    </div>
+    <div id="memberImportPanel" style="display:none;border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:#fafbfd;margin-bottom:12px;">
+      <div class="row" style="gap:8px;">
+        <input type="text" id="memberEmailInput" placeholder="불러올 회원의 이메일 주소" style="flex:1;min-width:240px;">
+        <button type="button" class="secondary" id="memberEmailCheckBtn">확인</button>
+        <span id="memberEmailResult" style="font-size:13px;"></span>
+      </div>
+      <div class="row" style="gap:8px;margin-top:10px;">
+        <button type="button" id="memberImportRunBtn" disabled>이 회원의 마스터 불러오기</button>
+        <button type="button" class="secondary" id="memberImportCancelBtn">닫기</button>
+      </div>
+      <div class="sub" style="margin:8px 0 0;font-size:12px;">상대방이 프로필에서 "내 마스터를 다른 회원에게 공유"를 켜둔 경우에만 검색됩니다. 불러오기는 복사본이라 상대방 마스터는 바뀌지 않습니다.</div>
     </div>
     <div class="sub" style="margin-bottom:8px;">엑셀 마스터 시트처럼 아래 표에 바로 기입하세요. 별도의 "저장" 버튼 없이, 입력하면 잠시 후 자동으로 저장됩니다. 맨 오른쪽은 항상 새 플랜을 적을 수 있는 빈 열입니다.</div>
     <div class="scrollwrap"><table class="grid" id="masterTable"></table></div>
@@ -1767,24 +1779,72 @@ async function refreshPlans(){
   renderAfterSheet(); // 마스터가 바뀌면 (후) 시트 자동완성도 다시 계산
 }
 
-// 관리자(wkdwlstn3@naver.com)가 등록해둔 마스터 플랜을 불러와 내 마스터 라이브러리에
-// 새 플랜으로 추가한다. 기존 내 플랜은 건드리지 않고 뒤에 이어 붙인다.
-async function importAdminMasterPlans(){
-  if(!confirm("관리자가 등록해둔 마스터 플랜을 불러와 내 마스터에 추가할까요?\n(기존 내 플랜은 그대로 유지되고, 관리자 플랜이 새 열로 추가됩니다)")) return;
-  const btn = document.getElementById("importAdminMasterBtn");
+// 다른 회원이 등록해둔 마스터 플랜을 이메일로 찾아 내 마스터 라이브러리에 새 플랜으로
+// 추가한다. 기존 내 플랜은 건드리지 않고 뒤에 이어 붙인다.
+// 상대방이 프로필에서 "내 마스터를 다른 회원에게 공유"를 켜둔 경우에만 검색된다.
+let memberImportVerifiedEmail = null;
+function setMemberEmailResult(html){
+  const el = document.getElementById("memberEmailResult");
+  if(el) el.innerHTML = html;
+}
+function resetMemberImportCheck(){
+  memberImportVerifiedEmail = null;
+  const runBtn = document.getElementById("memberImportRunBtn");
+  if(runBtn) runBtn.disabled = true;
+  setMemberEmailResult("");
+}
+async function checkMemberEmail(){
+  const input = document.getElementById("memberEmailInput");
+  const checkBtn = document.getElementById("memberEmailCheckBtn");
+  const runBtn = document.getElementById("memberImportRunBtn");
+  const email = (input.value || "").trim();
+  memberImportVerifiedEmail = null;
+  runBtn.disabled = true;
+  if(!email){
+    setMemberEmailResult('<span style="color:#c0392b;font-weight:800;font-size:15px;">X</span> 이메일을 입력해주세요.');
+    return;
+  }
+  if(typeof findSharedMember !== "function"){
+    setMemberEmailResult('<span style="color:#c0392b;font-weight:800;font-size:15px;">X</span> 회원 검색 기능을 불러올 수 없습니다.');
+    return;
+  }
+  checkBtn.disabled = true;
+  setMemberEmailResult("확인 중...");
+  try{
+    const found = await findSharedMember(email);
+    if(found){
+      memberImportVerifiedEmail = email;
+      runBtn.disabled = false;
+      setMemberEmailResult('<span style="color:#1a7a3c;font-weight:800;font-size:16px;">O</span> 불러올 수 있는 회원입니다.');
+    } else {
+      setMemberEmailResult('<span style="color:#c0392b;font-weight:800;font-size:16px;">X</span> 공유 중인 회원을 찾지 못했습니다. (상대방이 프로필에서 마스터 공유를 켜야 합니다)');
+    }
+  }catch(err){
+    setMemberEmailResult('<span style="color:#c0392b;font-weight:800;font-size:15px;">X</span> 확인 실패: ' + err.message);
+  }finally{
+    checkBtn.disabled = false;
+  }
+}
+async function importMemberMasterPlans(){
+  if(!memberImportVerifiedEmail){
+    alert('먼저 이메일을 입력하고 "확인"을 눌러주세요.');
+    return;
+  }
+  if(!confirm(memberImportVerifiedEmail + " 님의 마스터 플랜을 불러와 내 마스터에 추가할까요?\n(기존 내 플랜은 그대로 유지되고, 새 열로 추가됩니다)")) return;
+  const btn = document.getElementById("memberImportRunBtn");
   const statusEl = document.getElementById("masterStatus");
   if(btn) btn.disabled = true;
   try{
-    const adminPlans = await getAdminMasterPlans();
-    if(!adminPlans.length){
-      alert("불러올 수 있는 관리자 마스터 데이터가 없습니다.");
+    const memberPlans = await getMemberMasterPlans(memberImportVerifiedEmail);
+    if(!memberPlans.length){
+      alert("불러올 수 있는 마스터 데이터가 없습니다.");
       return;
     }
     if(plans.length && !plans[plans.length-1].id){
       plans.pop(); // 맨 뒤 빈 신규 작성용 열은 잠시 떼어두고, 불러온 플랜들을 채운 뒤 다시 자동으로 붙는다
     }
     let importedCount = 0;
-    for(const p of adminPlans){
+    for(const p of memberPlans){
       const newPlan = {
         id: null,
         plan_name: p.plan_name || "",
@@ -1804,7 +1864,7 @@ async function importAdminMasterPlans(){
     renderMasterTable();
     renderAfterSheet();
     statusEl.className = "status ok";
-    statusEl.textContent = "관리자 마스터 " + importedCount + "건을 불러왔습니다 (" + new Date().toLocaleTimeString() + ")";
+    statusEl.textContent = memberImportVerifiedEmail + " 님의 마스터 " + importedCount + "건을 불러왔습니다 (" + new Date().toLocaleTimeString() + ")";
   }catch(err){
     statusEl.className = "status err";
     statusEl.textContent = "불러오기 오류: " + err.message;
@@ -1813,7 +1873,6 @@ async function importAdminMasterPlans(){
     if(btn) btn.disabled = false;
   }
 }
-
 /* =========================================================================
    보장분석표(후) 탭
    - 열은 두 종류: "carryover"(보장분석표(전)에서 해지하지 않은 상품이 순서대로
@@ -2352,7 +2411,24 @@ document.getElementById("logoutLink").addEventListener("click", async (e)=>{
   await logout();
 });
 
-document.getElementById("importAdminMasterBtn").addEventListener("click", importAdminMasterPlans);
+document.getElementById("importMemberMasterBtn").addEventListener("click", ()=>{
+  const panel = document.getElementById("memberImportPanel");
+  const willOpen = panel.style.display === "none" || !panel.style.display;
+  panel.style.display = willOpen ? "block" : "none";
+  if(willOpen){
+    resetMemberImportCheck();
+    document.getElementById("memberEmailInput").focus();
+  }
+});
+document.getElementById("memberEmailCheckBtn").addEventListener("click", checkMemberEmail);
+document.getElementById("memberEmailInput").addEventListener("keydown", (e)=>{
+  if(e.key === "Enter"){ e.preventDefault(); checkMemberEmail(); }
+});
+document.getElementById("memberEmailInput").addEventListener("input", resetMemberImportCheck);
+document.getElementById("memberImportRunBtn").addEventListener("click", importMemberMasterPlans);
+document.getElementById("memberImportCancelBtn").addEventListener("click", ()=>{
+  document.getElementById("memberImportPanel").style.display = "none";
+});
 </script>
 </body>
 </html>
