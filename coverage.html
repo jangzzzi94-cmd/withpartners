@@ -428,14 +428,29 @@ function wireGridEnterNav(container){
     if(!target || !target.dataset || target.dataset.gridrow===undefined || target.dataset.gridcol===undefined) return;
     const tag = target.tagName;
     if(tag !== "INPUT" && tag !== "TEXTAREA") return;
-
     if(e.key === "Enter"){
       if(tag !== "INPUT") return; // 여러 줄 textarea는 Enter가 줄바꿈으로 쓰이도록 그대로 둔다
       e.preventDefault();
       moveGridFocus(container, target, 1, 0);
       return;
     }
-
+    // 위/아래 화살표 -- 엑셀처럼 바로 위/아래 칸으로 이동한다.
+    // 여러 줄 textarea(상품명, 기타 태그)는 글자 사이를 위아래로 오갈 수 있어야 하므로,
+    // 커서가 맨 앞(위로 갈 때)이나 맨 끝(아래로 갈 때)에 있을 때만 칸을 옮긴다.
+    // number 입력창은 위/아래가 값을 1씩 올리고 내리는 기본 동작이 있는데, 표에서는
+    // 그 동작이 오히려 값을 잘못 바꾸므로 막고 이동으로 쓴다.
+    if(e.key === "ArrowUp" || e.key === "ArrowDown"){
+      const dr = e.key === "ArrowUp" ? -1 : 1;
+      if(tag === "TEXTAREA"){
+        const atStart = target.selectionStart === 0 && target.selectionEnd === 0;
+        const atEnd = target.selectionStart === target.value.length && target.selectionEnd === target.value.length;
+        if(dr === -1 && !atStart) return;
+        if(dr === 1 && !atEnd) return;
+      }
+      const moved = moveGridFocus(container, target, dr, 0);
+      if(moved || (tag === "INPUT" && target.type === "number")) e.preventDefault();
+      return;
+    }
     if(e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
     // number 타입 입력창은 selectionStart를 읽을 수 없고(브라우저 제약) 화살표로 값 안에서
     // 커서를 옮기거나 스핀 버튼을 조작하는 기본 동작을 그대로 살려두기 위해 건드리지 않는다.
