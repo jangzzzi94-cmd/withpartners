@@ -407,3 +407,23 @@ async function adminSetStatus(userId, status){
   if(error) return { ok:false, message: error.message };
   return { ok:true };
 }
+// ============================================================
+// assets/supabase-client.js 맨 아래에 그대로 붙여넣으세요.
+// (기존 내용은 지우지 말고, 파일 끝에 추가하면 됩니다)
+//
+// 하는 일: coverage.html의 "관리자 마스터 불러오기" 버튼이 호출하는 함수.
+//          DB 함수 get_admin_master_plans()를 통해 관리자 계정의
+//          마스터 플랜 목록을 가져옵니다.
+//
+// 선행 조건: Supabase에 get_admin_master_plans() 함수가 만들어져 있어야 합니다.
+//           (get_admin_master_plans.sql 참고)
+// ============================================================
+
+async function getAdminMasterPlans() {
+  const { data, error } = await supabaseClient.rpc('get_admin_master_plans');
+  if (error) {
+    console.error('[getAdminMasterPlans]', error);
+    return [];
+  }
+  return data || [];
+}
