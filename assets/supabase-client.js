@@ -452,3 +452,55 @@ async function setMyMasterSharing(enabled) {
   }
   return true;
 }
+// ============================================================
+// assets/supabase-client.js 맨 아래에 붙여넣으세요.
+// (기존 내용은 지우지 말고 파일 끝에 추가. 단, 예전에 넣었던
+//  getAdminMasterPlans 함수가 있다면 그건 지워주세요.)
+//
+// 회원 간 마스터 공유 기능용 함수 4개.
+// 선행 조건: member_master_share.sql 을 Supabase에서 먼저 실행해야 합니다.
+// ============================================================
+
+// 이메일로 "공유 중인 회원"이 있는지 확인. 있으면 true(O), 없으면 false(X).
+// 공유를 꺼둔 회원도 false 로 나옵니다.
+async function findSharedMember(email) {
+  const { data, error } = await supabaseClient
+    .rpc('find_shared_member', { p_email: email });
+  if (error) {
+    console.error('[findSharedMember]', error);
+    return false;
+  }
+  return data === true;
+}
+
+// 해당 이메일 회원의 마스터 플랜 목록을 가져옵니다. (읽기 전용)
+async function getMemberMasterPlans(email) {
+  const { data, error } = await supabaseClient
+    .rpc('get_member_master_plans', { p_email: email });
+  if (error) {
+    console.error('[getMemberMasterPlans]', error);
+    return [];
+  }
+  return data || [];
+}
+
+// 내 "마스터 공유" 설정 읽기
+async function getMyMasterSharing() {
+  const { data, error } = await supabaseClient.rpc('get_my_master_sharing');
+  if (error) {
+    console.error('[getMyMasterSharing]', error);
+    return false;
+  }
+  return data === true;
+}
+
+// 내 "마스터 공유" 켜기 / 끄기
+async function setMyMasterSharing(enabled) {
+  const { error } = await supabaseClient
+    .rpc('set_my_master_sharing', { p_enabled: !!enabled });
+  if (error) {
+    console.error('[setMyMasterSharing]', error);
+    return false;
+  }
+  return true;
+}
