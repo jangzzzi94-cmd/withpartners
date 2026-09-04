@@ -7,37 +7,31 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
 <style>
-  :root{
-    --navy:#13233F; --navy-light:#1D3358; --gold:#B08D57;
-    --paper:#FAF8F3; --ink:#1B1F27; --ink-soft:#5B6270; --line:#E4DFD3;
-  }
-  *{box-sizing:border-box;}
-  body{margin:0;font-family:'Pretendard',sans-serif;color:var(--ink);background:var(--paper);}
-  header{background:var(--navy);color:#F2EFE6;padding:22px 48px;display:flex;justify-content:space-between;align-items:center;}
-  .wordmark{font-family:'Noto Serif KR',serif;font-size:19px;font-weight:700;}
-  .wordmark span{color:var(--gold);}
-  .back{color:#F2EFE6;text-decoration:none;font-size:13px;opacity:0.8;}
-  main{max-width:680px;margin:0 auto;padding:56px 24px;}
-  h1{font-family:'Noto Serif KR',serif;font-size:24px;font-weight:700;margin:0 0 8px 0;}
-  .sub{color:var(--ink-soft);font-size:14px;margin:0 0 36px 0;}
-  .packages{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:32px;}
-  .pkg{border:1px solid var(--line);background:#fff;border-radius:2px;padding:22px;cursor:pointer;text-align:left;font-family:'Pretendard',sans-serif;}
-  .pkg.selected{border-color:var(--navy);box-shadow:0 0 0 1px var(--navy);}
-  .pkg-credits{font-family:'Noto Serif KR',serif;font-size:19px;font-weight:700;color:var(--navy);}
-  .pkg-price{font-size:14px;color:var(--ink-soft);margin-top:6px;}
-  .pkg-bonus{display:inline-block;margin-top:8px;font-size:12px;font-weight:600;color:var(--gold);background:#F2ECDD;padding:3px 8px;border-radius:12px;}
-  .pay-btn{width:100%;padding:15px;background:var(--navy);color:#F2EFE6;border:none;border-radius:2px;font-size:15.5px;font-weight:600;cursor:pointer;font-family:'Pretendard',sans-serif;}
-  .pay-btn:disabled{opacity:0.4;cursor:not-allowed;}
-  .msg{margin-top:16px;font-size:13.5px;padding:12px 14px;border-radius:2px;display:none;}
-  .msg.show{display:block;background:#F7EAE6;color:#B3402A;border:1px solid #E9C6BB;}
+  main{max-width:960px;margin:0 auto;padding:60px 24px;}
+  main h1{font-size:26px;color:var(--navy-950);margin:0 0 6px;}
+  main p.sub{color:var(--muted);margin:0 0 36px;font-size:14px;}
+  .packages{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:28px;}
+  @media (max-width:640px){.packages{grid-template-columns:1fr;}}
+  .pkg{background:#fff;border:1px solid var(--line);border-radius:16px;padding:28px 26px;transition:.15s;display:block;width:100%;text-align:left;cursor:pointer;font-family:inherit;}
+  .pkg:hover{border-color:var(--navy-600);box-shadow:0 10px 24px rgba(15,37,69,.08);transform:translateY(-2px);}
+  .pkg.selected{border-color:var(--navy-600);box-shadow:0 0 0 2px rgba(43,81,144,.18);}
+  .pkg-credits{font-size:19px;font-weight:800;color:var(--navy-950);}
+  .pkg-price{font-size:13.5px;color:var(--muted);margin-top:6px;}
+  .pkg-bonus{display:inline-block;margin-top:12px;font-size:11.5px;background:var(--navy-100);color:var(--navy-700);padding:4px 10px;border-radius:20px;font-weight:600;}
+  .pay-btn{width:100%;padding:14px;background:var(--navy-900);color:#fff;border:none;border-radius:9px;font-size:14.5px;font-weight:700;cursor:pointer;transition:.15s;font-family:inherit;}
+  .pay-btn:hover:not(:disabled){background:var(--navy-800);}
+  .pay-btn:disabled{background:#a9b6c6;cursor:not-allowed;}
+  .msg{font-size:13px;margin-top:14px;padding:10px 12px;border-radius:8px;display:none;}
+  .msg.show{display:block;background:#fdecea;color:var(--danger);}
 </style>
 </head>
 <body>
-<header>
-  <div class="wordmark">With<span>·</span>Partner</div>
-  <a class="back" href="dashboard.html">← 대시보드</a>
-</header>
+<div class="navbar">
+<a href="dashboard.html" class="brand">With <span>Partner</span></a>
+<nav><a href="profile.html">프로필</a><a href="dashboard.html">대시보드</a><a href="#" id="logoutLink">로그아웃</a></nav>
+</div>
 
 <main>
   <h1>크레딧 충전</h1>
@@ -124,6 +118,17 @@
     if(!session) return;
     currentUser = session.user;
     renderPackages();
+  })();
+</script>
+<script>
+  (function(){
+    var el = document.getElementById('logoutLink');
+    if(!el) return;
+    el.addEventListener('click', async function(e){
+      e.preventDefault();
+      if(typeof logout === 'function'){ await logout(); }
+      else { window.location.href = 'login.html'; }
+    });
   })();
 </script>
 </body>
