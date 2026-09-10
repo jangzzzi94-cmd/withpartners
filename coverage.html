@@ -1035,7 +1035,7 @@ async function loadResumeFile(file){
     const beforeColumns = beforeRaw.map((c,i)=>({
       header: { insurer:c.insurer, productName:c.productName, duration:c.duration, term:c.term, premium:c.premium, holder:c.holder },
       amounts: c.amounts,
-      textTags: c.text45 ? c.text45.split(",").map(s=>s.trim()).filter(Boolean) : [],
+      textTags: c.text45 ? String(c.text45).split(/\r?\n/) : [], // 저장된 줄바꿈을 그대로 복원
       // 저장 당시 "유지" 표시(숨김 인덱스 또는 색칠)가 있던 상품은 그대로 유지 상태로 복원
       kept: !!(c.wasKept || (explicitKeptBeforeIdx && explicitKeptBeforeIdx.includes(i))),
       id: "b" + (nextBeforeColId++),
@@ -1241,7 +1241,7 @@ function renderPreview(result){
     html += `</tr>`;
   });
 
-  html += `<tr><td class="grouplabel stick-l0" colspan="3">기타(텍스트 태그, 줄바꿈 또는 쉼표로 구분)</td>`;
+  html += `<tr><td class="grouplabel stick-l0" colspan="3">기타(텍스트 태그, 줄바꿈으로 구분)</td>`;
   result.columns.forEach((c,i)=> html += `<td><textarea rows="4" class="pv-etc-input" data-col="${i}" data-gridrow="${6+numericRowDefs.length}" data-gridcol="${i}">${(c.textTags||[]).join("\n").replace(/</g,"&lt;")}</textarea></td>`);
   html += `</tr>`;
 
@@ -1289,7 +1289,11 @@ function renderPreview(result){
       const c = lastResult && lastResult.columns[i];
       if(!c) return;
       // 줄바꿈으로 여러 줄 입력도 가능하고, 기존처럼 쉼표로 한 줄에 여러 개를 적어도 된다.
-      c.textTags = inp.value.split(/[\n,]+/).map(s=>s.trim()).filter(Boolean);
+      // 화면에 보이는 줄 그대로 보관한다. 줄바꿈이 곧 구분이며, 한 줄 안에 쉼표가 있어도
+      // 그 자체를 글자로 취급한다(예전에는 쉼표도 구분자로 잘라서 저장 시 합쳐져 버렸다).
+      const etcLines = inp.value.split(/\r?\n/);
+      while(etcLines.length && etcLines[etcLines.length-1].trim() === "") etcLines.pop();
+      c.textTags = etcLines;
     });
   });
 }
@@ -1339,7 +1343,15 @@ function fillSheetColumns(ws, columns, getField){
       ws.getCell(row, col).value = Number.isFinite(n) ? n : v;
     });
     const textVal = getField(c, "text45");
-    ws.getCell(45, col).value = textVal ? textVal : null;
+    const etcCell = ws.getCell(45, col);
+    etcCell.value = textVal ? textVal : null;
+    // 줄바꿈이 들어간 값은 엑셀에서도 여러 줄로 보이도록 "텍스트 줄바꿈"을 켠다.
+    // (셀마다 새 style 객체를 만들어야 같은 서식을 쓰는 다른 열까지 함께 바뀌지 않는다)
+    if(textVal && String(textVal).indexOf("\n") >= 0){
+      etcCell.style = Object.assign({}, etcCell.style, {
+        alignment: Object.assign({}, (etcCell.style && etcCell.style.alignment) || {}, { wrapText: true }),
+      });
+    }
   });
 }
 
@@ -1683,7 +1695,7 @@ dlBtn.addEventListener("click", async ()=>{
     wsBefore.getCell("C2").value = lastResult.customerName || lastResult.baseName || "";
     fillSheetColumns(wsBefore, lastResult.columns, (c, field)=>{
       if(field === "amounts") return c.amounts;
-      if(field === "text45") return (c.textTags && c.textTags.length) ? c.textTags.join(", ") : "";
+      if(field === "text45") return (c.textTags && c.textTags.length) ? c.textTags.join("\n") : "";
       return c.header[field];
     });
     applyKeptFillToMetaCells(wsBefore, lastResult.columns, c=>!!c.kept);
@@ -2382,7 +2394,7 @@ function syncAfterCarryoverFromBefore(){
   const newCarryover = keptCols.map(src=>{
     if(existingBySource.has(src.id)) return existingBySource.get(src.id);
     const items = { ...src.amounts };
-    if(src.textTags && src.textTags.length) items["45"] = src.textTags.join(", ");
+    if(src.textTags && src.textTags.length) items["45"] = src.textTags.join("\n");
     return {
       source:"carryover", sourceId: src.id, alias:"", lastMatchedPlanId:null,
       productName: src.header.productName||"", insurer: src.header.insurer||"",
