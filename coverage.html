@@ -1012,7 +1012,9 @@ async function loadResumeFile(file){
 
     const beforeRaw = readColumnsFromWorksheet(wsBefore);
     const afterRaw = readColumnsFromWorksheet(wsAfter);
-    if(!beforeRaw.length) throw new Error("보장분석표(전) 시트에서 상품 데이터를 찾지 못했습니다.");
+    // 가입된 보험이 없어 보장분석표(전)을 비워둔 채 내려받은 파일도 그대로 이어서 쓸 수 있게,
+    // (전)이 비어 있으면 (후)에 적힌 내용만 불러온다. 둘 다 비어 있을 때만 오류로 본다.
+    if(!beforeRaw.length && !afterRaw.length) throw new Error("보장분석표(전)/(후) 어느 시트에서도 상품 데이터를 찾지 못했습니다. With Partners에서 내려받은 파일인지 확인해주세요.");
 
     // "유지"/자동연동 표시가 있던 열을 알아내는 데는 두 가지를 함께 쓴다.
     // 1) 숨김 시트(_wp_kept)에 저장해둔 정확한 인덱스 값 -- 앱이 다운로드해줄 때 자동으로
@@ -1101,10 +1103,13 @@ async function loadResumeFile(file){
       currentJobId = null;
     }
 
+    const loadedSummary = beforeRaw.length
+      ? `상품 ${lastResult.columns.length}건, 유지 표시 포함`
+      : `보장분석표(전)은 비어 있어 (후) ${afterRaw.length}건만 불러옴`;
     resumeStatus.className = "status ok";
     resumeStatus.textContent = resumedFree
-      ? `불러왔습니다 (상품 ${lastResult.columns.length}건, 유지 표시 포함). 내가 결제했던 작업으로 확인되어, 다음 다운로드는 포인트 차감 없이 받을 수 있습니다.`
-      : `불러왔습니다 (상품 ${lastResult.columns.length}건, 유지 표시 포함). 다만 이 파일이 결제했던 작업인지 확인되지 않아, 다음 다운로드는 새 작업으로 처리되어 포인트가 차감됩니다.`;
+      ? `불러왔습니다 (${loadedSummary}). 내가 결제했던 작업으로 확인되어, 다음 다운로드는 포인트 차감 없이 받을 수 있습니다.`
+      : `불러왔습니다 (${loadedSummary}). 다만 이 파일이 결제했던 작업인지 확인되지 않아, 다음 다운로드는 새 작업으로 처리되어 포인트가 차감됩니다.`;
   }catch(err){
     console.error(err);
     resumeStatus.className = "status err";
