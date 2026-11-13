@@ -2844,8 +2844,13 @@ document.getElementById("memberImportCancelBtn").addEventListener("click", ()=>{
 #masterLinkBar.on{ display:inline-flex; }
 #masterLinkBar .mchip{ background:#e8f1ff; border:1px solid #cfe0ff; color:#2f6bff; border-radius:999px; padding:3px 10px; font-weight:600; }
 #masterLinkBar .mhint{ color:#8b95a1; }
-#masterLinkBar button{ border:1px solid #d7dbe3; background:#fff; border-radius:8px; padding:3px 10px; font-size:12px; cursor:pointer; }
+#masterLinkBar button{ border:1px solid #d7dbe3 !important; background:#ffffff !important; color:#191f28 !important; font-weight:600; border-radius:8px; padding:3px 10px; font-size:12px; line-height:1.5; cursor:pointer; }
 #masterLinkBar button:hover{ background:#f3f5f9; }
+button.mdanger{ border:1px solid #f0c4c4 !important; background:#fff5f5 !important; color:#d64545 !important; font-weight:600; border-radius:8px; padding:3px 10px; font-size:12px; line-height:1.5; cursor:pointer; }
+button.mdanger:hover{ background:#ffeaea !important; }
+button.mdanger:disabled{ opacity:.5; cursor:default; }
+#masterLinkBar button.mdanger{ border:1px solid #f0c4c4 !important; background:#fff5f5 !important; color:#d64545 !important; }
+#masterLinkBar button.mdanger:hover{ background:#ffeaea !important; }
 </style>
 <script>
 (function(){
@@ -2870,11 +2875,12 @@ document.getElementById("memberImportCancelBtn").addEventListener("click", ()=>{
     var hint=document.createElement('span'); hint.className='mhint';
     hint.textContent='연한 파란색 칸 = 연동중 · 숫자를 입력하면 그 칸만 연동 해제 · 내용을 모두 지우면 다시 연동';
     var b1=document.createElement('button'); b1.type='button'; b1.textContent='지금 동기화';
-    var b2=document.createElement('button'); b2.type='button'; b2.textContent='연동 해제';
+    var b2=document.createElement('button'); b2.type='button'; b2.textContent='연동 해제 (열 삭제)'; b2.className='mdanger';
     bar.appendChild(b1); bar.appendChild(b2); bar.appendChild(hint);
     b1.addEventListener('click', function(){ syncLinked(true); });
     b2.addEventListener('click', unlinkAll);
-    if(btn.parentNode) btn.parentNode.insertBefore(bar, btn.nextSibling);
+    var after=$('masterDeleteAllBtn')||btn;
+    if(after.parentNode) after.parentNode.insertBefore(bar, after.nextSibling);
     return bar;
   }
   function paintBar(){
@@ -2883,6 +2889,20 @@ document.getElementById("memberImportCancelBtn").addEventListener("click", ()=>{
     var bar=ensureBar(); if(!bar) return;
     if(LINK_EMAIL){ bar.classList.add('on'); bar.querySelector('.mchip').textContent='마스터 연동중 · '+LINK_EMAIL; }
     else bar.classList.remove('on');
+  }
+
+  /* ---------- 전체 삭제 버튼 ---------- */
+  function ensureTools(){
+    var del=$('masterDeleteAllBtn');
+    if(del) return del;
+    var btn=$('importMemberMasterBtn'); if(!btn) return null;
+    del=document.createElement('button');
+    del.type='button'; del.id='masterDeleteAllBtn'; del.className='mdanger';
+    del.style.marginLeft='6px';
+    del.textContent='🗑 플랜 전체 삭제';
+    del.addEventListener('click', deleteAllPlans);
+    if(btn.parentNode) btn.parentNode.insertBefore(del, btn.nextSibling);
+    return del;
   }
 
   /* ---------- 색칠 ---------- */
@@ -3011,17 +3031,54 @@ document.getElementById("memberImportCancelBtn").addEventListener("click", ()=>{
     }
   }
 
-  /* ---------- 연동 해제 ---------- */
+  /* ---------- 연동 해제 (연동된 열 삭제) ---------- */
   async function unlinkAll(){
-    if(!confirm('마스터 연동을 해제할까요?\n\n현재 입력된 값은 그대로 남고,\n이후 상대방이 수정해도 반영되지 않습니다.')) return;
     var lp=linkedPlans();
-    for(var i=0;i<lp.length;i++){
-      lp[i].link_src_id=null; lp[i].link_src_email=null; lp[i].link_ovr=[];
-      try{ await store.savePlan(currentUserId, lp[i]); }catch(e){}
+    if(!lp.length){ alert('연동된 열이 없습니다.'); return; }
+    if(!confirm('마스터 연동을 해제합니다.\n\n연동으로 가져온 열 '+lp.length+'개는 내용까지 모두 삭제됩니다.\n(직접 만든 열은 그대로 남습니다)\n\n계속할까요?')) return;
+    if(!confirm('정말로 삭제하시겠습니까?')) return;
+    var ps=livePlans();
+    for(var i=ps.length-1;i>=0;i--){
+      if(ps[i] && ps[i].link_src_id){
+        try{ if(ps[i].id) await store.deletePlan(currentUserId, ps[i].id); }catch(e){}
+        ps.splice(i,1);
+      }
     }
     LINK_EMAIL=null; SRC={};
     try{ renderMasterTable(); }catch(e){}
+    try{ renderAfterSheet(); }catch(e){}
     paintBar(); applyTint();
+    var st=$('masterStatus');
+    if(st){ st.className='status ok'; st.textContent='연동 해제 및 연동 열 삭제 완료 · '+new Date().toLocaleTimeString(); }
+  }
+
+  /* ---------- 플랜 전체 삭제 ---------- */
+  async function deleteAllPlans(){
+    var ps=livePlans();
+    var real=ps.filter(function(p){ return p && p.id; });
+    if(!real.length){ alert('삭제할 플랜이 없습니다.'); return; }
+    if(!confirm('마스터의 플랜(열) '+real.length+'개를 전부 삭제합니다.\n\n입력된 보장 내용도 함께 사라지며\n되돌릴 수 없습니다.\n\n계속할까요?')) return;
+    if(!confirm('정말로 삭제하시겠습니까?')) return;
+    var btn=$('masterDeleteAllBtn');
+    if(btn) btn.disabled=true;
+    var fail=0;
+    try{
+      for(var i=0;i<real.length;i++){
+        try{ await store.deletePlan(currentUserId, real[i].id); }catch(e){ fail++; }
+      }
+      ps.length=0;
+      LINK_EMAIL=null; SRC={};
+      try{ renderMasterTable(); }catch(e){}
+      try{ renderAfterSheet(); }catch(e){}
+      var st=$('masterStatus');
+      if(st){
+        st.className = fail ? 'status' : 'status ok';
+        st.textContent = fail ? (real.length-fail)+'개 삭제, '+fail+'개 실패' : '플랜 '+real.length+'개를 모두 삭제했습니다 · '+new Date().toLocaleTimeString();
+      }
+    }finally{
+      if(btn) btn.disabled=false;
+      paintBar(); applyTint();
+    }
   }
 
   /* ---------- 입력 감지 ---------- */
@@ -3082,7 +3139,7 @@ document.getElementById("memberImportCancelBtn").addEventListener("click", ()=>{
     var _rm=window.renderMasterTable;
     window.renderMasterTable=function(){
       var r=_rm.apply(this, arguments);
-      try{ wire(); detect(); paintBar(); applyTint(); }catch(e){}
+      try{ wire(); ensureTools(); detect(); paintBar(); applyTint(); }catch(e){}
       return r;
     };
     window.renderMasterTable.__mlink=true;
@@ -3117,7 +3174,7 @@ document.getElementById("memberImportCancelBtn").addEventListener("click", ()=>{
   }
 
   function boot(){
-    try{ rebindRunBtn(); wire(); detect(); paintBar(); applyTint(); }catch(e){}
+    try{ rebindRunBtn(); ensureTools(); wire(); detect(); paintBar(); applyTint(); }catch(e){}
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
