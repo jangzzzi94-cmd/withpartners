@@ -33,14 +33,26 @@
 <a href="signup.html">회원가입</a>
 </div>
 <div class="msg" id="msg"></div>
-<p class="sub" style="margin:18px 0 0;text-align:center;font-size:12px;">초기 비밀번호: 111111</p>
+
 </div>
 </div>
 
-<footer style="max-width:480px;margin:32px auto 24px;padding:0 24px;text-align:center;font-size:11.5px;color:#8a8f98;line-height:1.7;">
-위드파트너스 | 대표: 장진수 | 사업자등록번호: 747-18-02719<br>
-경기도 수원시 팔달구 권광로285번길 46, B102호(인계동, 아트빌)<br>
-고객센터: wkdwlstn3@naver.com
+<style>
+  .auth-wrap{ min-height:calc(100vh - 260px) !important; }
+  .biz-info{ max-width:720px; margin:20px auto 28px; padding:0 16px 8px; text-align:center;
+    font-size:12.5px; line-height:1.85; color:#8b95a1; }
+  .biz-info .nm{ font-weight:700; color:#4e5968; }
+  .biz-info a{ color:#4e5968; font-weight:600; text-decoration:none; }
+  .biz-info a:hover{ text-decoration:underline; }
+  .biz-info .cp{ margin-top:6px; color:#b0b8c1; font-size:11.5px; }
+  @media (max-width:560px){ .biz-info{ font-size:11.5px; } }
+</style>
+<footer class="biz-info">
+  <div><a href="/refund-policy.html">취소 및 환불 정책</a></div>
+  <div><span class="nm">위드파트너스</span> &nbsp;|&nbsp; 대표자명 장진수 &nbsp;|&nbsp; 사업자등록번호 747-18-02719</div>
+  <div>사업장 주소 경기도 수원시 팔달구 권광로285번길 46, B102호(인계동, 아트빌)</div>
+  <div>유선번호 010-2689-5388 &nbsp;|&nbsp; 이메일 wkdwlstn3@naver.com</div>
+  <div class="cp">&copy; 2026 위드파트너스. All rights reserved.</div>
 </footer>
 
 <script src="assets/supabase-client.js"></script>
@@ -72,37 +84,5 @@ supabaseClient.auth.getSession().then(({data})=>{
 });
 </script>
 
-<!-- 사업자정보 (카드사 심사 필수) -->
-<style>
-  .biz-footer{margin-top:40px;padding:24px 16px 32px;background:#f5f6f8;border-top:1px solid #e6e9ef;
-    font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
-    font-size:13px;line-height:1.75;color:#5b6476;text-align:left}
-  .biz-footer .inner{max-width:1000px;margin:0 auto}
-  .biz-footer .links{margin-bottom:12px}
-  .biz-footer .links a{color:#374151;text-decoration:none;font-weight:600;margin-right:16px}
-  .biz-footer .links a:hover{text-decoration:underline}
-  .biz-footer .name{font-weight:700;color:#171b23;font-size:14px;margin-bottom:8px}
-  .biz-footer dl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0 0 10px;max-width:720px}
-  .biz-footer dt{font-weight:600;color:#374151;white-space:nowrap}
-  .biz-footer dd{margin:0}
-  .biz-footer .copy{color:#8e97a8;font-size:12px}
-  @media (max-width:560px){.biz-footer dl{grid-template-columns:1fr;gap:0}.biz-footer dd{margin:0 0 7px}}
-</style>
-<footer class="biz-footer">
-  <div class="inner">
-    <div class="links">
-      <a href="/refund-policy.html">취소 및 환불 정책</a>
-    </div>
-    <div class="name">위드파트너스</div>
-    <dl>
-      <dt>대표자명</dt><dd>장진수</dd>
-      <dt>사업자등록번호</dt><dd>747-18-02719</dd>
-      <dt>사업장 주소</dt><dd>경기도 수원시 팔달구 권광로285번길 46, B102호(인계동, 아트빌)</dd>
-      <dt>유선번호</dt><dd>010-2689-5388</dd>
-      <dt>이메일</dt><dd>wkdwlstn3@naver.com</dd>
-    </dl>
-    <div class="copy">&copy; 2026 위드파트너스. All rights reserved.</div>
-  </div>
-</footer>
 </body>
 </html>
