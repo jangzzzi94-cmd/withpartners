@@ -2837,5 +2837,303 @@ document.getElementById("memberImportCancelBtn").addEventListener("click", ()=>{
   document.getElementById("memberImportPanel").style.display = "none";
 });
 </script>
+<!-- ===== 마스터 연동 (linked master) ===== -->
+<style>
+.master-input.mlinked, .master-item-input.mlinked{ background:#e8f1ff !important; }
+#masterLinkBar{ display:none; align-items:center; gap:8px; margin:8px 0 0; font-size:12px; flex-wrap:wrap; }
+#masterLinkBar.on{ display:inline-flex; }
+#masterLinkBar .mchip{ background:#e8f1ff; border:1px solid #cfe0ff; color:#2f6bff; border-radius:999px; padding:3px 10px; font-weight:600; }
+#masterLinkBar .mhint{ color:#8b95a1; }
+#masterLinkBar button{ border:1px solid #d7dbe3; background:#fff; border-radius:8px; padding:3px 10px; font-size:12px; cursor:pointer; }
+#masterLinkBar button:hover{ background:#f3f5f9; }
+</style>
+<script>
+(function(){
+  var META=['plan_name','insurer','duration','term','premium','holder'];
+  var SRC={}, LINK_EMAIL=null, syncing=false;
+
+  function $(id){ return document.getElementById(id); }
+  function norm(v){ return (v===null||v===undefined)?'':String(v).trim(); }
+  function livePlans(){ try{ return (typeof plans!=='undefined'&&Array.isArray(plans))?plans:[]; }catch(e){ return []; } }
+  function linkedPlans(){ return livePlans().filter(function(p){ return p && p.link_src_id; }); }
+  function ovrOf(p){ if(!Array.isArray(p.link_ovr)) p.link_ovr=[]; return p.link_ovr; }
+  function keyOfEl(el){ return el.dataset.field ? ('m:'+el.dataset.field) : ('i:'+el.dataset.row); }
+  function detect(){ var lp=linkedPlans(); LINK_EMAIL = lp.length ? (lp[0].link_src_email||null) : null; return LINK_EMAIL; }
+
+  /* ---------- 상단 연동 표시 ---------- */
+  function ensureBar(){
+    var bar=$('masterLinkBar');
+    if(bar) return bar;
+    var btn=$('importMemberMasterBtn'); if(!btn) return null;
+    bar=document.createElement('div'); bar.id='masterLinkBar';
+    var chip=document.createElement('span'); chip.className='mchip'; bar.appendChild(chip);
+    var hint=document.createElement('span'); hint.className='mhint';
+    hint.textContent='연한 파란색 칸 = 연동중 · 숫자를 입력하면 그 칸만 연동 해제 · 내용을 모두 지우면 다시 연동';
+    var b1=document.createElement('button'); b1.type='button'; b1.textContent='지금 동기화';
+    var b2=document.createElement('button'); b2.type='button'; b2.textContent='연동 해제';
+    bar.appendChild(b1); bar.appendChild(b2); bar.appendChild(hint);
+    b1.addEventListener('click', function(){ syncLinked(true); });
+    b2.addEventListener('click', unlinkAll);
+    if(btn.parentNode) btn.parentNode.insertBefore(bar, btn.nextSibling);
+    return bar;
+  }
+  function paintBar(){
+    var btn=$('importMemberMasterBtn');
+    if(btn) btn.textContent = LINK_EMAIL ? '📥 다른 회원 마스터 연동 변경' : '📥 다른 회원 마스터 연동하기';
+    var bar=ensureBar(); if(!bar) return;
+    if(LINK_EMAIL){ bar.classList.add('on'); bar.querySelector('.mchip').textContent='마스터 연동중 · '+LINK_EMAIL; }
+    else bar.classList.remove('on');
+  }
+
+  /* ---------- 색칠 ---------- */
+  function applyTint(){
+    var tb=$('masterTable'); if(!tb) return;
+    var ps=livePlans();
+    var els=tb.querySelectorAll('.master-input,.master-item-input');
+    for(var i=0;i<els.length;i++){
+      var el=els[i], p=ps[Number(el.dataset.col)], on=false;
+      if(p && p.link_src_id) on = ovrOf(p).indexOf(keyOfEl(el))<0;
+      el.classList.toggle('mlinked', on);
+    }
+  }
+
+  /* ---------- 연동/수정 상태 재계산 ---------- */
+  function reconcile(col){
+    var p=livePlans()[col];
+    if(!p || !p.link_src_id) return false;
+    var s=SRC[p.link_src_id]; if(!s) return false;
+    var ovr=ovrOf(p), restored=false;
+    function setOvr(k,on){ var i=ovr.indexOf(k); if(on&&i<0) ovr.push(k); if(!on&&i>=0) ovr.splice(i,1); }
+    META.forEach(function(f){
+      var k='m:'+f, lv=norm(p[f]), sv=norm(s[f]);
+      if(lv===''){ setOvr(k,false); if(sv!==''){ p[f]=s[f]; restored=true; } }
+      else setOvr(k, lv!==sv);
+    });
+    var si=s.items||{}, li=p.items||(p.items={});
+    var seen={};
+    Object.keys(si).forEach(function(k){ seen[k]=1; });
+    Object.keys(li).forEach(function(k){ seen[k]=1; });
+    Object.keys(seen).forEach(function(r){
+      var k='i:'+r, lv=norm(li[r]), sv=norm(si[r]);
+      if(lv===''){ setOvr(k,false); if(sv!==''){ li[r]=si[r]; restored=true; } }
+      else setOvr(k, lv!==sv);
+    });
+    return restored;
+  }
+
+  /* ---------- 원본에서 끌어오기 ---------- */
+  async function syncLinked(force){
+    if(syncing) return;
+    detect();
+    if(!LINK_EMAIL){ paintBar(); applyTint(); return; }
+    syncing=true;
+    try{
+      var rows=await getMemberMasterPlans(LINK_EMAIL);
+      if(!Array.isArray(rows)||!rows.length){
+        if(force) alert('상대방의 마스터를 불러올 수 없습니다. 상대방이 마스터 공유를 꺼두었을 수 있습니다.');
+        return;
+      }
+      SRC={}; rows.forEach(function(r){ SRC[r.id]=r; });
+      var dirty=[];
+      linkedPlans().forEach(function(p){
+        var s=SRC[p.link_src_id]; if(!s) return;
+        var ovr=ovrOf(p), ch=false;
+        META.forEach(function(f){
+          if(ovr.indexOf('m:'+f)>=0) return;
+          if(norm(p[f])!==norm(s[f])){ p[f]=s[f]; ch=true; }
+        });
+        var si=s.items||{}, li=p.items||(p.items={});
+        Object.keys(si).forEach(function(r){
+          if(ovr.indexOf('i:'+r)>=0) return;
+          if(norm(li[r])!==norm(si[r])){ li[r]=si[r]; ch=true; }
+        });
+        Object.keys(li).forEach(function(r){
+          if(ovr.indexOf('i:'+r)>=0) return;
+          if(!(r in si) && norm(li[r])!==''){ delete li[r]; ch=true; }
+        });
+        if(ch) dirty.push(p);
+      });
+      for(var i=0;i<dirty.length;i++){
+        try{ await store.savePlan(currentUserId, dirty[i]); }catch(e){}
+      }
+      if(dirty.length||force){
+        try{ renderMasterTable(); }catch(e){}
+        try{ renderAfterSheet(); }catch(e){}
+      }
+      var st=$('masterStatus');
+      if(force && st){ st.className='status ok'; st.textContent='마스터 동기화 완료 · '+new Date().toLocaleTimeString(); }
+    }catch(e){ console.warn('master link sync', e); }
+    finally{ syncing=false; paintBar(); applyTint(); }
+  }
+
+  /* ---------- 연동하기 ---------- */
+  async function linkMemberMasterPlans(){
+    var email=null;
+    try{ email = (typeof memberImportVerifiedEmail!=='undefined' && memberImportVerifiedEmail) ? memberImportVerifiedEmail : null; }catch(e){}
+    if(!email){ alert('먼저 이메일 확인을 해주세요.'); return; }
+    if(!confirm(email+' 님의 마스터를 연동합니다.\n\n· 상대방이 마스터를 수정하면 자동으로 반영됩니다.\n· 기존에 연동되어 있던 열은 교체됩니다.\n\n계속할까요?')) return;
+    var btn=$('memberImportRunBtn'), st=$('masterStatus');
+    if(btn) btn.disabled=true;
+    try{
+      var rows=await getMemberMasterPlans(email);
+      if(!Array.isArray(rows)||!rows.length){ alert('가져올 마스터가 없습니다.'); return; }
+      var ps=livePlans();
+      for(var i=ps.length-1;i>=0;i--){
+        if(ps[i] && ps[i].link_src_id){
+          try{ if(ps[i].id) await store.deletePlan(currentUserId, ps[i].id); }catch(e){}
+          ps.splice(i,1);
+        }
+      }
+      if(ps.length && !norm(ps[ps.length-1].plan_name)) ps.pop();
+      var n=0;
+      for(var j=0;j<rows.length;j++){
+        var s=rows[j];
+        if(!norm(s.plan_name)) continue;
+        var np={ id:null, plan_name:s.plan_name, insurer:s.insurer||null, duration:s.duration||null,
+                 term:s.term||null, premium:s.premium||null, holder:s.holder||null,
+                 items: JSON.parse(JSON.stringify(s.items||{})),
+                 link_src_id:s.id, link_src_email:email, link_ovr:[] };
+        var saved=await store.savePlan(currentUserId, np);
+        if(saved && saved.id) np.id=saved.id;
+        ps.push(np); n++;
+      }
+      SRC={}; rows.forEach(function(r){ SRC[r.id]=r; });
+      LINK_EMAIL=email;
+      var panel=$('memberImportPanel'); if(panel) panel.style.display='none';
+      try{ renderMasterTable(); }catch(e){}
+      try{ renderAfterSheet(); }catch(e){}
+      if(st){ st.className='status ok'; st.textContent=n+'개 열을 '+email+' 님과 연동했습니다 · '+new Date().toLocaleTimeString(); }
+    }catch(err){
+      alert('연동 실패: '+((err&&err.message)?err.message:err));
+    }finally{
+      if(btn) btn.disabled=false;
+      paintBar(); applyTint();
+    }
+  }
+
+  /* ---------- 연동 해제 ---------- */
+  async function unlinkAll(){
+    if(!confirm('마스터 연동을 해제할까요?\n\n현재 입력된 값은 그대로 남고,\n이후 상대방이 수정해도 반영되지 않습니다.')) return;
+    var lp=linkedPlans();
+    for(var i=0;i<lp.length;i++){
+      lp[i].link_src_id=null; lp[i].link_src_email=null; lp[i].link_ovr=[];
+      try{ await store.savePlan(currentUserId, lp[i]); }catch(e){}
+    }
+    LINK_EMAIL=null; SRC={};
+    try{ renderMasterTable(); }catch(e){}
+    paintBar(); applyTint();
+  }
+
+  /* ---------- 입력 감지 ---------- */
+  function isCell(el){
+    return el && el.classList && (el.classList.contains('master-input')||el.classList.contains('master-item-input'));
+  }
+  function wire(){
+    var tb=$('masterTable');
+    if(!tb || tb.getAttribute('data-mlink')==='1') return;
+    tb.setAttribute('data-mlink','1');
+    tb.addEventListener('input', function(e){
+      var el=e.target; if(!isCell(el)) return;
+      var p=livePlans()[Number(el.dataset.col)];
+      if(!p || !p.link_src_id){ el.classList.remove('mlinked'); return; }
+      var s=SRC[p.link_src_id]||{};
+      var sv = el.dataset.field ? norm(s[el.dataset.field]) : norm((s.items||{})[el.dataset.row]);
+      var lv = norm(el.value);
+      el.classList.toggle('mlinked', lv==='' || lv===sv);
+    }, false);
+    tb.addEventListener('focusout', function(e){
+      var el=e.target; if(!isCell(el)) return;
+      if(norm(el.value)!=='') return;
+      var col=Number(el.dataset.col);
+      var p=livePlans()[col]; if(!p || !p.link_src_id) return;
+      var rt=e.relatedTarget;
+      var gr=(rt&&rt.dataset)?rt.dataset.gridrow:null, gc=(rt&&rt.dataset)?rt.dataset.gridcol:null;
+      if(reconcile(col)){
+        try{ renderMasterTable(); }catch(e2){}
+        try{ schedulePlanSave(col); }catch(e2){}
+        if(gr!=null && gc!=null){
+          var nx=document.querySelector('#masterTable [data-gridrow="'+gr+'"][data-gridcol="'+gc+'"]');
+          if(nx) nx.focus();
+        }
+      }
+    }, false);
+  }
+
+  /* ---------- 기존 함수 래핑 ---------- */
+  if(typeof store!=='undefined' && store && typeof store.savePlan==='function' && !store.__mlink){
+    var _sp=store.savePlan.bind(store);
+    store.savePlan=async function(userId, plan){
+      var saved=await _sp(userId, plan);
+      try{
+        var id=(saved&&saved.id)||plan.id;
+        if(id){
+          await supabaseClient.from('coverage_master_plans').update({
+            link_src_id: plan.link_src_id||null,
+            link_src_email: plan.link_src_email||null,
+            link_ovr: Array.isArray(plan.link_ovr)?plan.link_ovr:[]
+          }).eq('id', id).eq('user_id', userId);
+        }
+      }catch(e){ console.warn('link meta save', e); }
+      return saved;
+    };
+    store.__mlink=true;
+  }
+  if(typeof window.renderMasterTable==='function' && !window.renderMasterTable.__mlink){
+    var _rm=window.renderMasterTable;
+    window.renderMasterTable=function(){
+      var r=_rm.apply(this, arguments);
+      try{ wire(); detect(); paintBar(); applyTint(); }catch(e){}
+      return r;
+    };
+    window.renderMasterTable.__mlink=true;
+  }
+  if(typeof window.savePlanColumn==='function' && !window.savePlanColumn.__mlink){
+    var _sc=window.savePlanColumn;
+    window.savePlanColumn=function(col){
+      try{ reconcile(col); }catch(e){}
+      return _sc.apply(this, arguments);
+    };
+    window.savePlanColumn.__mlink=true;
+  }
+  if(typeof window.refreshPlans==='function' && !window.refreshPlans.__mlink){
+    var _rp=window.refreshPlans;
+    window.refreshPlans=async function(){
+      var r=await _rp.apply(this, arguments);
+      try{ await syncLinked(); }catch(e){}
+      return r;
+    };
+    window.refreshPlans.__mlink=true;
+  }
+
+  /* ---------- 버튼 라벨 / 바인딩 ---------- */
+  function rebindRunBtn(){
+    var rb=$('memberImportRunBtn');
+    if(!rb || rb.getAttribute('data-mlink')==='1') return;
+    var nb=rb.cloneNode(false);
+    nb.setAttribute('data-mlink','1');
+    nb.textContent='이 회원의 마스터 연동하기';
+    rb.parentNode.replaceChild(nb, rb);
+    nb.addEventListener('click', linkMemberMasterPlans);
+  }
+
+  function boot(){
+    try{ rebindRunBtn(); wire(); detect(); paintBar(); applyTint(); }catch(e){}
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+  setTimeout(boot, 1200);
+
+  var tries=0;
+  var iv=setInterval(function(){
+    tries++;
+    if(tries>25){ clearInterval(iv); return; }
+    try{
+      if(linkedPlans().length){ clearInterval(iv); syncLinked(); }
+    }catch(e){}
+  }, 1000);
+
+  window.__masterLink={ sync:syncLinked, tint:applyTint, unlink:unlinkAll };
+})();
+</script>
 </body>
 </html>
