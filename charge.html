@@ -39,6 +39,26 @@
 
   <div class="packages" id="packages"></div>
 
+  
+  <!-- 구매 전 안내 (서비스 제공시점 고지 - 카드사 심사 필수) -->
+  <style>
+    .pay-notice{margin:16px 0;padding:14px 16px;background:#eef1f6;border:1px solid #dfe3ec;border-radius:12px;
+      font-size:13px;line-height:1.75;color:#424c5e;text-align:left}
+    .pay-notice b{color:#171b23}
+    .pay-notice ul{margin:6px 0 0;padding-left:18px}
+    .pay-notice li{margin-bottom:4px}
+    .pay-notice a{color:#2f6bff;font-weight:600}
+  </style>
+  <div class="pay-notice">
+    <b>구매 전 확인해 주세요</b>
+    <ul>
+      <li><b>상품 구분</b> · 무형의 디지털 상품(사이트 내 이용권)으로, 별도 배송이 없습니다.</li>
+      <li><b>서비스 제공 시점</b> · 결제 승인 <b>즉시</b> 회원 계정에 크레딧이 적립됩니다.</li>
+      <li><b>크레딧 유효기간</b> · 충전일로부터 <b>5년</b></li>
+      <li><b>결제 방식</b> · 단건 결제이며, 정기결제(자동결제)는 운영하지 않습니다.</li>
+      <li><b>취소 및 환불</b> · 미사용 크레딧은 결제일로부터 7일 이내 전액 환불됩니다. 일부 사용 시 사용분을 제외한 잔액을 환불합니다. 자세한 내용은 <a href="/refund-policy.html" target="_blank">취소 및 환불 정책</a>을 확인해 주세요.</li>
+    </ul>
+  </div>
   <button class="pay-btn" id="payBtn" disabled>결제하기</button>
   <div class="msg" id="errMsg"></div>
 </main>
@@ -131,5 +151,38 @@
     });
   })();
 </script>
+
+<!-- 사업자정보 (카드사 심사 필수) -->
+<style>
+  .biz-footer{margin-top:40px;padding:24px 16px 32px;background:#f5f6f8;border-top:1px solid #e6e9ef;
+    font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+    font-size:13px;line-height:1.75;color:#5b6476;text-align:left}
+  .biz-footer .inner{max-width:1000px;margin:0 auto}
+  .biz-footer .links{margin-bottom:12px}
+  .biz-footer .links a{color:#374151;text-decoration:none;font-weight:600;margin-right:16px}
+  .biz-footer .links a:hover{text-decoration:underline}
+  .biz-footer .name{font-weight:700;color:#171b23;font-size:14px;margin-bottom:8px}
+  .biz-footer dl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0 0 10px;max-width:720px}
+  .biz-footer dt{font-weight:600;color:#374151;white-space:nowrap}
+  .biz-footer dd{margin:0}
+  .biz-footer .copy{color:#8e97a8;font-size:12px}
+  @media (max-width:560px){.biz-footer dl{grid-template-columns:1fr;gap:0}.biz-footer dd{margin:0 0 7px}}
+</style>
+<footer class="biz-footer">
+  <div class="inner">
+    <div class="links">
+      <a href="/refund-policy.html">취소 및 환불 정책</a>
+    </div>
+    <div class="name">위드파트너스</div>
+    <dl>
+      <dt>대표자명</dt><dd>장진수</dd>
+      <dt>사업자등록번호</dt><dd>747-18-02719</dd>
+      <dt>사업장 주소</dt><dd>경기도 수원시 팔달구 권광로285번길 46, B102호(인계동, 아트빌)</dd>
+      <dt>유선번호</dt><dd>010-2689-5388</dd>
+      <dt>이메일</dt><dd>wkdwlstn3@naver.com</dd>
+    </dl>
+    <div class="copy">&copy; 2026 위드파트너스. All rights reserved.</div>
+  </div>
+</footer>
 </body>
 </html>
