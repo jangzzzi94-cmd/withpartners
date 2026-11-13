@@ -3192,5 +3192,120 @@ button.mdanger:disabled{ opacity:.5; cursor:default; }
   window.__masterLink={ sync:syncLinked, tint:applyTint, unlink:unlinkAll };
 })();
 </script>
+<!-- ===== (전) 기본 표 + 드래그앤드롭 ===== -->
+<style>
+#manualAddBtn{ display:none !important; }
+#sheet-before.wp-drop{ outline:3px dashed #2f6bff; outline-offset:-6px; background:#f3f8ff; }
+.wp-dndhint{ display:inline-block; margin-left:8px; font-size:12px; color:#2f6bff; font-weight:600; }
+</style>
+<script>
+(function(){
+  function $(id){ return document.getElementById(id); }
+
+  /* ---------- 파일 없이도 (전) 표가 보이게 ---------- */
+  function ensureBeforeTable(){
+    var card=$('previewCard'); if(!card) return false;
+    if(card.style.display && card.style.display!=='none') return true;
+    var has=false;
+    try{ has=(typeof lastResult!=='undefined') && lastResult && (lastResult.columns||[]).length>0; }catch(e){}
+    if(has) return true;
+    var b=$('manualAddBtn'); if(!b) return false;
+    b.click();
+    try{
+      var st=$('status');
+      if(st){ st.className='status'; st.textContent='파일을 선택하거나 이 화면으로 끌어다 놓으세요. (PDF 또는 .xlsx/.xlsm)'; }
+    }catch(e){}
+    return true;
+  }
+
+  /* ---------- 안내 문구 ---------- */
+  function ensureHint(){
+    if($('wpDndHint')) return;
+    var fi=$('fileInput'); if(!fi) return;
+    var s=document.createElement('span');
+    s.id='wpDndHint'; s.className='wp-dndhint';
+    s.textContent='⬇ 파일을 이 화면으로 끌어다 놓아도 됩니다';
+    if(fi.parentNode) fi.parentNode.insertBefore(s, fi.nextSibling);
+  }
+
+  /* ---------- 드래그앤드롭 ---------- */
+  function inResume(e){
+    var rz=$('resumeDropZone');
+    return !!(rz && e && e.target && rz.contains(e.target));
+  }
+  function wireDrop(){
+    var zone=$('sheet-before'); if(!zone) return;
+    if(zone.getAttribute('data-wpdnd')==='1') return;
+    zone.setAttribute('data-wpdnd','1');
+    function over(e){
+      if(inResume(e)) return;
+      e.preventDefault();
+      try{ if(e.dataTransfer) e.dataTransfer.dropEffect='copy'; }catch(x){}
+      zone.classList.add('wp-drop');
+    }
+    function off(e){
+      if(inResume(e)) return;
+      if(e.type==='dragleave' && e.relatedTarget && zone.contains(e.relatedTarget)) return;
+      zone.classList.remove('wp-drop');
+    }
+    zone.addEventListener('dragenter', over, false);
+    zone.addEventListener('dragover', over, false);
+    zone.addEventListener('dragleave', off, false);
+    zone.addEventListener('drop', function(e){
+      if(inResume(e)) return;
+      e.preventDefault();
+      zone.classList.remove('wp-drop');
+      var fi=$('fileInput'); if(!fi) return;
+      var files=(e.dataTransfer && e.dataTransfer.files) ? e.dataTransfer.files : null;
+      if(!files || !files.length) return;
+      var f=files[0];
+      var nm=(f.name||'').toLowerCase();
+      if(!/\.(pdf|xlsx|xlsm)$/.test(nm)){
+        alert('PDF 또는 엑셀(.xlsx, .xlsm) 파일만 올릴 수 있습니다.');
+        return;
+      }
+      try{
+        var dt=new DataTransfer(); dt.items.add(f);
+        fi.files=dt.files;
+        fi.dispatchEvent(new Event('change',{bubbles:true}));
+      }catch(err){
+        alert('파일을 불러오지 못했습니다: '+((err&&err.message)?err.message:err));
+        return;
+      }
+      try{
+        var st=$('status');
+        if(st){ st.className='status ok'; st.textContent=f.name+' — 아래 [실행] 버튼을 눌러주세요.'; }
+      }catch(x){}
+      var rb=$('runBtn');
+      if(rb && !rb.disabled){ try{ rb.focus(); }catch(x){} }
+    }, false);
+  }
+
+  /* ---------- 브라우저 기본 동작(파일 열기) 막기 ---------- */
+  function guardWindow(){
+    if(window.__wpDndGuard) return;
+    window.__wpDndGuard=true;
+    window.addEventListener('dragover', function(e){ e.preventDefault(); }, false);
+    window.addEventListener('drop', function(e){
+      var zone=$('sheet-before');
+      if(zone && zone.contains(e.target)) return;
+      var rz=$('resumeDropZone');
+      if(rz && rz.contains(e.target)) return;
+      e.preventDefault();
+    }, false);
+  }
+
+  var tries=0;
+  function boot(){
+    try{ ensureHint(); wireDrop(); guardWindow(); }catch(e){}
+    var ok=false;
+    try{ ok=ensureBeforeTable(); }catch(e){}
+    tries++;
+    if(!ok && tries<20) setTimeout(boot, 600);
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(boot, 500); });
+  else setTimeout(boot, 500);
+})();
+</script>
 </body>
 </html>
