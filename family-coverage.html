@@ -451,19 +451,21 @@ const SHEET_KEYWORD = '보장차이';
    requireLogin()이 자동으로 login.html로 이동시키므로 이 페이지에 별도의
    로그인 폼은 필요 없다. 관리자/골드 회원은 무제한 무료, 그 외 회원은
    "PDF로 저장"을 누를 때 point_costs 테이블의 family_coverage 값만큼 차감된다
-   (관리자가 admin.html에서 수정 가능, 기본값 1,000P).
+   (관리자가 admin.html에서 수정 가능, 기본값 1크레딧).
    ========================================================================= */
 let freeUnlimited = false;
-let familyCoverageCost = 1000; // 1회 PDF 저장당 차감 포인트. 관리자가 admin.html에서 수정 가능(로그인 시 최신값으로 갱신됨)
+let familyCoverageCost = 1; // 1회 PDF 저장당 차감 크레딧. 관리자가 admin.html에서 수정 가능(로그인 시 최신값으로 갱신됨)
 (async ()=>{
   const session = await requireLogin(); // 세션 없으면 여기서 login.html로 리다이렉트되고 아래 코드는 실행되지 않음
   if(!session) return;
   const myProfile = await getMyProfile();
   freeUnlimited = !!myProfile && (myProfile.role === 'admin' || myProfile.role === 'gold');
   if(!freeUnlimited){
-    const costs = await getPointCosts(); // 관리자가 admin.html에서 수정한 최신 차감 포인트를 읽어온다
+    const costs = await getPointCosts(); // 관리자가 admin.html에서 수정한 최신 차감 크레딧을 읽어온다
     familyCoverageCost = costs.family_coverage;
   }
+  renderHero();   // 최신 차감 크레딧이 버튼 글자에 바로 반영되도록 다시 그린다
+  renderResults();
 })();
 document.getElementById("logoutLink").addEventListener("click", async (e)=>{
   e.preventDefault();
@@ -649,7 +651,7 @@ function renderResults(){
     <div class="print-page">${printHeaderHTML()}${renderTimeline(valid)}${renderContributionBlock(valid)}</div>
     <div class="print-page">${printHeaderHTML()}${renderDetailTable(valid)}</div>
     <div class="actions-row">
-      <button class="btn btn-outline" onclick="downloadPDF()">⬇ PDF로 저장${freeUnlimited ? "" : " · " + familyCoverageCost.toLocaleString() + "P"}</button>
+      <button class="btn btn-outline" onclick="downloadPDF()">⬇ PDF로 저장${freeUnlimited ? "" : " " + familyCoverageCost.toLocaleString() + "크레딧 차감"}</button>
     </div>
     <div class="pdf-hint" style="font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.7;">
       ※ PDF로 저장을 누르면 인쇄창이 열립니다. 대상을 &quot;PDF로 저장&quot;으로 선택해주세요. (Chrome/Edge 기준 파일명에 고객명이 자동으로 채워집니다)<br>
@@ -862,14 +864,14 @@ async function downloadPDF(){
   const valid = validPeople();
   const first = valid[0] || people.find(p=>!p.error);
 
-  // 관리자/골드 회원이 아니면 PDF로 저장 1회당 포인트를 차감한다(차감액은 DB point_costs
+  // 관리자/골드 회원이 아니면 PDF로 저장 1회당 크레딧을 차감한다(차감액은 DB point_costs
   // 테이블 값이며 관리자가 admin.html에서 수정할 수 있다). window.print()는 인쇄창을 여는
   // 것일 뿐 사용자가 취소할 수도 있어서, 미리 차감 사실을 안내하고 동의를 받은 뒤에 차감한다.
   if(!freeUnlimited){
-    if(!confirm(familyCoverageCost.toLocaleString() + "P가 차감됩니다. 계속하시겠습니까?")) return;
+    if(!confirm(familyCoverageCost.toLocaleString() + "크레딧이 차감됩니다. 계속하시겠습니까?")) return;
     const ok = await spendPoints('family_coverage');
     if(!ok){
-      alert("포인트 차감에 실패했습니다. 포인트가 부족하거나 승인 상태를 확인해주세요. (PDF는 저장되지 않았습니다)");
+      alert("크레딧 차감에 실패했습니다. 크레딧이 부족하거나 승인 상태를 확인해주세요. (PDF는 저장되지 않았습니다)");
       return;
     }
   }

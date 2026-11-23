@@ -145,7 +145,7 @@ table.summary-table thead td{font-weight:700;background:#f2f4f8;color:var(--ink-
     <div class="row">
       <input type="file" id="fileInput" accept=".pdf,.xlsx,.xlsm">
       <button id="runBtn" disabled>가져오기 실행</button>
-      <button id="dlBtn" class="secondary" disabled>전체 다운로드 (원본 서식 .xlsx)</button>
+      <button id="dlBtn" class="secondary" disabled>전체 다운로드</button>
     </div>
     <div class="row" style="margin-top:12px;gap:10px;">
       <label for="customerNameInput" style="font-size:13px;font-weight:600;white-space:nowrap;">고객명</label>
@@ -1031,6 +1031,21 @@ const dlBtn = document.getElementById("dlBtn");
 const status = document.getElementById("status");
 const logBox = document.getElementById("log");
 
+// 다운로드 버튼 글자를 상황에 맞게 한 곳에서 정리한다.
+//  - 관리자/골드 : "전체 다운로드"
+//  - 이미 결제했던 파일을 이어서 작업 중 : "전체 다운로드 기존파일 차감없음"
+//  - 새 작업 : "전체 다운로드 3크레딧 차감"
+function updateDlBtnLabel(){
+  if(!dlBtn || dlBtn.dataset.busy === "1") return;
+  if(freeUnlimited){
+    dlBtn.textContent = "전체 다운로드";
+  } else if(currentJobId){
+    dlBtn.textContent = "전체 다운로드 기존파일 차감없음";
+  } else {
+    dlBtn.textContent = "전체 다운로드 " + coverageCost.toLocaleString() + "크레딧 차감";
+  }
+}
+
 fileInput.addEventListener("change", ()=>{
   runBtn.disabled = !fileInput.files.length;
   dlBtn.disabled = true;
@@ -1098,6 +1113,7 @@ runBtn.addEventListener("click", async ()=>{
     lastResult = { columns, customerName, baseName: file.name.replace(/\.(pdf|xlsx|xlsm)$/i,"") };
     syncCustomerNameInput(); // 자동으로 읽은 고객명을 입력칸에도 보여준다(직접 고칠 수 있음)
     currentJobId = null; // 새로 분석한 결과이므로 이전에 이어서 작업하던 job과는 무관한 새 작업으로 취급
+    updateDlBtnLabel();
     renderPreview(lastResult);
     syncAfterCarryoverFromBefore(); // 해지 안 한(유지 중인) 상품을 보장분석표(후)에 순차적으로 자동 반영
     status.className = "status ok";
@@ -1141,6 +1157,7 @@ manualAddBtn.addEventListener("click", ()=>{
     // 파일 없이 처음 시작하는 경우 -- 빈 보장분석표(전)을 새로 만든다
     lastResult = { columns: [], customerName: (customerNameInput.value||"").trim(), baseName: "" };
     currentJobId = null; // 결제해서 받은 파일을 이어받는 것이 아니라 새 작업
+    updateDlBtnLabel();
     deleteHistory = [];
     updateUndoButtons();
   }
@@ -1279,15 +1296,16 @@ async function loadResumeFile(file){
       ? `보장분석표(전) ${lastResult.columns.length}건` + (afterRaw.length ? `, (후) ${afterRaw.length}건` : "") + ", 유지 표시 포함"
       : `보장분석표(전)은 비어 있어 (후) ${afterRaw.length}건만 불러옴`;
     resumeStatus.textContent = freeUnlimited
-      ? `불러왔습니다 (${loadedCountText}). 관리자/골드 회원은 다운로드 시 포인트가 차감되지 않으니 걱정 없이 이어서 받으실 수 있습니다.`
+      ? `불러왔습니다 (${loadedCountText}). 관리자/골드 회원은 다운로드 시 크레딧이 차감되지 않으니 걱정 없이 이어서 받으실 수 있습니다.`
       : resumedFree
-        ? `불러왔습니다 (${loadedCountText}). 내가 결제했던 작업으로 확인되어, 다음 다운로드는 포인트 차감 없이 받을 수 있습니다.`
-        : `불러왔습니다 (${loadedCountText}). 다만 이 파일이 결제했던 작업인지 확인되지 않아, 다음 다운로드는 새 작업으로 처리되어 포인트가 차감됩니다.`;
+        ? `불러왔습니다 (${loadedCountText}). 내가 결제했던 작업으로 확인되어, 다음 다운로드는 크레딧 차감 없이 받을 수 있습니다.`
+        : `불러왔습니다 (${loadedCountText}). 다만 이 파일이 결제했던 작업인지 확인되지 않아, 다음 다운로드는 새 작업으로 처리되어 크레딧이 차감됩니다.`;
   }catch(err){
     console.error(err);
     resumeStatus.className = "status err";
     resumeStatus.textContent = "불러오기 실패: " + err.message;
   }finally{
+    updateDlBtnLabel();
     resumeUploadBtn.disabled = false;
   }
 }
@@ -1853,8 +1871,34 @@ async function replaceCoverSheetWithImage(wb, customerName){
 
 dlBtn.addEventListener("click", async ()=>{
   if(!lastResult) return;
+
+  // 크레딧은 "파일이 실제로 저장됐을 때"만 차감되어야 한다.
+  // 그래서 엑셀을 만들기 전에 먼저 저장 위치를 물어보고, 사용자가 저장창에서
+  // 취소하면 파일도 만들지 않고 크레딧도 건드리지 않는다.
+  // (저장창은 사용자가 버튼을 누른 직후에만 열 수 있으므로 다른 await보다 먼저 호출한다.)
+  const dlName = String(lastResult.customerName || lastResult.baseName || "").trim();
+  const dlFileName = (dlName ? dlName + " " : "") + "보장분석표.xlsx";
+  let saveHandle = null;
+  if(typeof window.showSaveFilePicker === "function"){
+    try{
+      saveHandle = await window.showSaveFilePicker({
+        suggestedName: dlFileName,
+        types: [{
+          description: "Excel 통합 문서",
+          accept: { "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"] }
+        }]
+      });
+    }catch(pickErr){
+      // 사용자가 저장을 취소한 경우 -- 아무것도 하지 않고 조용히 끝낸다
+      if(pickErr && (pickErr.name === "AbortError" || pickErr.name === "NotAllowedError")) return;
+      // 그 밖의 이유로 저장창을 못 연 경우에는 예전처럼 바로 내려받는 방식으로 진행한다
+      console.warn("저장창을 열지 못해 일반 다운로드로 진행합니다:", pickErr);
+      saveHandle = null;
+    }
+  }
+
   dlBtn.disabled = true;
-  const prevLabel = dlBtn.textContent;
+  dlBtn.dataset.busy = "1";
   dlBtn.textContent = "생성 중...";
   try{
     // 원본 서식 파일은 base64 텍스트(assets/coverage_template.b64.txt)로 보관되어 있다.
@@ -1924,7 +1968,7 @@ dlBtn.addEventListener("click", async ()=>{
       if(!currentJobId){
         const newJobId = await createCoverageJob();
         if(!newJobId){
-          alert("포인트 차감에 실패했습니다. 포인트가 부족하거나 승인 상태를 확인해주세요. (엑셀은 생성되지 않았습니다)");
+          alert("크레딧 차감에 실패했습니다. 크레딧이 부족하거나 승인 상태를 확인해주세요. (엑셀은 생성되지 않았습니다)");
           return;
         }
         currentJobId = newJobId;
@@ -1959,19 +2003,27 @@ dlBtn.addEventListener("click", async ()=>{
     }
 
     const buf2 = await wb.xlsx.writeBuffer();
-    const blob = new Blob([buf2], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    const dlName = String(lastResult.customerName || lastResult.baseName || "").trim();
-    a.href = url; a.download = (dlName ? dlName + " " : "") + "보장분석표.xlsx";
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    if(saveHandle){
+      // 사용자가 직접 고른 위치에 바로 써준다 (여기까지 와야 실제로 파일이 생긴다)
+      const writable = await saveHandle.createWritable();
+      await writable.write(buf2);
+      await writable.close();
+    } else {
+      // 저장창을 지원하지 않는 브라우저(사파리/파이어폭스/모바일 등)는 예전 방식 그대로
+      const blob = new Blob([buf2], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = dlFileName;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
   }catch(err){
     console.error(err);
     alert("다운로드 중 오류가 발생했습니다: " + err.message);
   }finally{
     dlBtn.disabled = false;
-    dlBtn.textContent = prevLabel;
+    dlBtn.dataset.busy = "0";
+    updateDlBtnLabel();
   }
 });
 
@@ -2055,7 +2107,7 @@ let currentProfile = null; // 로그인한 회원의 profiles row (표지 이미
 let plans = []; // [{id, plan_name, insurer, items:{...}}, ...] 마지막 열은 항상 id가 없는 빈 신규 작성용 열
 const planSaveTimers = {};
 let freeUnlimited = false; // 관리자/골드 회원은 엑셀 다운로드 포인트 차감 없이 무제한 이용
-let coverageCost = 3000; // 엑셀 다운로드 1회당 차감 포인트. 관리자가 admin.html에서 수정 가능(로그인 시 최신값으로 갱신됨)
+let coverageCost = 3; // 엑셀 다운로드 1회당 차감 크레딧. 관리자가 admin.html에서 수정 가능(로그인 시 최신값으로 갱신됨)
 
 function blankPlan(){
   return { id:null, plan_name:"", insurer:"", duration:"", term:"", premium:"", holder:"", items:{} };
@@ -2804,10 +2856,10 @@ document.querySelectorAll(".sheettab").forEach(btn=>{
   currentProfile = myProfile;
   freeUnlimited = !!myProfile && (myProfile.role === 'admin' || myProfile.role === 'gold');
   if(!freeUnlimited){
-    const costs = await getPointCosts(); // 관리자가 admin.html에서 수정한 최신 차감 포인트를 읽어온다
+    const costs = await getPointCosts(); // 관리자가 admin.html에서 수정한 최신 차감 크레딧을 읽어온다
     coverageCost = costs.coverage;
-    dlBtn.textContent = dlBtn.textContent + " · " + coverageCost.toLocaleString() + "P";
   }
+  updateDlBtnLabel();
 
   await loadOtherCompanyLimits();
   await refreshPlans();
@@ -3305,229 +3357,6 @@ button.mdanger:disabled{ opacity:.5; cursor:default; }
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(boot, 500); });
   else setTimeout(boot, 500);
-})();
-</script>
-<!-- ===== 크레딧 차감 안내 (카드사 심사 필수) ===== -->
-<style>
-  .wp-credit-bar{
-    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
-    margin:14px 0 18px; padding:13px 16px;
-    background:#fff8e8; border:1px solid #f0d9a8; border-radius:12px;
-    font-size:13.5px; line-height:1.7; color:#6b5520;
-    font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
-  }
-  .wp-credit-bar.free{ background:#eef8f0; border-color:#bfe3c8; color:#2f6b45; }
-  .wp-credit-bar .wp-ico{ font-size:16px; }
-  .wp-credit-bar b{ color:#8a6412; }
-  .wp-credit-bar.free b{ color:#1f7a44; }
-  .wp-credit-bar .wp-bal{
-    margin-left:auto; background:#fff; border:1px solid #ecd9b0;
-    border-radius:999px; padding:3px 12px; font-size:12.5px; font-weight:700; color:#8a6412;
-  }
-  .wp-credit-bar.free .wp-bal{ border-color:#bfe3c8; color:#1f7a44; }
-  @media (max-width:640px){ .wp-credit-bar .wp-bal{ margin-left:0; } }
-
-  .wp-modal-bg{
-    position:fixed; inset:0; background:rgba(15,23,42,.45);
-    display:flex; align-items:center; justify-content:center; z-index:99999; padding:20px;
-    font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
-  }
-  .wp-modal{
-    background:#fff; border-radius:16px; max-width:420px; width:100%;
-    padding:26px 26px 20px; box-shadow:0 20px 50px rgba(15,23,42,.25);
-  }
-  .wp-modal h3{ margin:0 0 10px; font-size:17px; color:#171b23; }
-  .wp-modal p{ margin:0 0 6px; font-size:14px; line-height:1.75; color:#4e5968; }
-  .wp-modal .wp-amt{ font-size:15px; font-weight:800; color:#d97706; }
-  .wp-modal .wp-free{ font-size:15px; font-weight:800; color:#1f7a44; }
-  .wp-modal .wp-calc{
-    margin:14px 0 4px; padding:12px 14px; background:#f7f9fc;
-    border:1px solid #e6e9ef; border-radius:10px; font-size:13.5px; color:#424c5e;
-  }
-  .wp-modal .wp-calc.free{ background:#f2faf4; border-color:#cfe9d8; color:#2f6b45; }
-  .wp-modal .wp-btns{ display:flex; gap:8px; margin-top:18px; }
-  .wp-modal button{
-    flex:1; padding:12px; border-radius:9px; font-size:14px; font-weight:700;
-    cursor:pointer; font-family:inherit; border:1px solid #d7dbe3; background:#fff; color:#4e5968;
-  }
-  .wp-modal button.wp-go{ background:#0f2545; border-color:#0f2545; color:#fff; }
-  .wp-modal button:hover{ filter:brightness(.97); }
-</style>
-<script>
-(function(){
-  var BTN_ID = 'dlBtn';
-  var balance = null;
-
-  function $(id){ return document.getElementById(id); }
-
-  /* 차감 금액 */
-  function cost(){
-    try { if (typeof coverageCost === 'number' && coverageCost > 0) return coverageCost; } catch(e){}
-    return 3;
-  }
-
-  /*
-     차감되지 않는 경우
-     - 'unlimited' : 관리자·무제한 계정
-     - 'reuse'     : 이미 만든 보장분석표를 불러와 이어서 수정하는 중
-  */
-  function freeReason(){
-    try { if (typeof freeUnlimited !== 'undefined' && freeUnlimited) return 'unlimited'; } catch(e){}
-    try { if (typeof currentJobId !== 'undefined' && currentJobId) return 'reuse'; } catch(e){}
-    return null;
-  }
-
-  /* ---------- 보유 크레딧 읽기 (실패해도 무시) ---------- */
-  async function loadBalance(){
-    try{
-      if (typeof getMyProfile !== 'function') return;
-      var p = await getMyProfile();
-      if (!p) return;
-      var keys = ['points','credits','point','credit','balance','remaining_points'];
-      for (var i=0;i<keys.length;i++){
-        if (typeof p[keys[i]] === 'number'){ balance = p[keys[i]]; break; }
-      }
-      paintBar();
-    }catch(e){}
-  }
-
-  /* ---------- 상단 안내 바 ---------- */
-  function ensureBar(){
-    var bar = $('wpCreditBar');
-    if (bar) return bar;
-    var h1 = document.querySelector('main h1') || document.querySelector('h1');
-    if (!h1) return null;
-    bar = document.createElement('div');
-    bar.id = 'wpCreditBar';
-    bar.className = 'wp-credit-bar';
-    bar.innerHTML = '<span class="wp-ico">💳</span>' +
-                    '<span id="wpCreditMsg"></span>' +
-                    '<span class="wp-bal" id="wpCreditBal"></span>';
-    var after = h1;
-    var nx = h1.nextElementSibling;
-    if (nx && nx.tagName === 'P') after = nx;
-    if (after.parentNode) after.parentNode.insertBefore(bar, after.nextSibling);
-    return bar;
-  }
-
-  function paintBar(){
-    var bar = ensureBar(); if (!bar) return;
-    var msg = $('wpCreditMsg'), bal = $('wpCreditBal');
-    var free = freeReason();
-    var n = cost();
-
-    if (free){
-      bar.className = 'wp-credit-bar free';
-      if (bar.querySelector('.wp-ico')) bar.querySelector('.wp-ico').textContent = '✅';
-      msg.innerHTML = (free === 'reuse')
-        ? '<b>기존에 사용했던 파일이라 크레딧이 차감되지 않습니다.</b> 수정 후 몇 번을 내려받아도 추가 차감이 없습니다.'
-        : '<b>크레딧이 차감되지 않는 계정입니다.</b> 자유롭게 내려받으실 수 있습니다.';
-    } else {
-      bar.className = 'wp-credit-bar';
-      if (bar.querySelector('.wp-ico')) bar.querySelector('.wp-ico').textContent = '💳';
-      msg.innerHTML = '이 기능은 <b>전체 다운로드 시 ' + n + '크레딧이 차감됩니다</b>. 업로드와 편집은 무료이며, 결과물을 내려받을 때만 차감됩니다.';
-    }
-
-    if (bal){
-      bal.textContent = (balance === null)
-        ? (free ? '차감 없음' : '1회 ' + n + '크레딧')
-        : '현재 보유 ' + balance.toLocaleString() + '크레딧';
-    }
-  }
-
-  /* ---------- 버튼 라벨 ---------- */
-  function paintBtn(){
-    var b = $(BTN_ID);
-    if (!b) return;
-    var t = (b.textContent || '');
-    if (t.indexOf('크레딧') >= 0) return;
-    b.textContent = t.replace(/\s*\d+\s*P\s*$/,'').trim() + ' · ' + cost() + '크레딧 차감';
-  }
-
-  /* ---------- 확인창 ---------- */
-  function confirmModal(onGo){
-    var free = freeReason();
-    var n = cost();
-
-    var bg = document.createElement('div');
-    bg.className = 'wp-modal-bg';
-
-    var head, body, calc, goLabel;
-
-    if (free){
-      head    = '보장분석표 전체 다운로드';
-      body    = (free === 'reuse')
-        ? '<span class="wp-free">기존에 사용했던 파일이라 크레딧이 차감되지 않습니다.</span>'
-        : '<span class="wp-free">이 계정은 크레딧이 차감되지 않습니다.</span>';
-      calc    = '<div class="wp-calc free">' +
-                (balance === null
-                  ? '보유 크레딧은 그대로 유지됩니다.'
-                  : '보유 <b>' + balance.toLocaleString() + '크레딧</b> → 다운로드 후에도 <b>' + balance.toLocaleString() + '크레딧</b>') +
-                '</div>';
-      goLabel = '확인';
-    } else {
-      head    = '보장분석표 전체 다운로드';
-      body    = '이 파일을 내려받으면 <span class="wp-amt">' + n + '크레딧</span>이 차감됩니다.';
-      calc    = (balance === null)
-        ? '<div class="wp-calc">차감 후 잔여 크레딧은 대시보드에서 확인하실 수 있습니다.</div>'
-        : '<div class="wp-calc">보유 <b>' + balance.toLocaleString() + '크레딧</b> → 차감 후 <b>' +
-          Math.max(0, balance - n).toLocaleString() + '크레딧</b></div>';
-      goLabel = n + '크레딧 사용하고 다운로드';
-    }
-
-    bg.innerHTML =
-      '<div class="wp-modal" role="dialog" aria-modal="true">' +
-        '<h3>' + head + '</h3>' +
-        '<p>' + body + '</p>' +
-        calc +
-        '<div class="wp-btns">' +
-          '<button type="button" id="wpNo">취소</button>' +
-          '<button type="button" class="wp-go" id="wpYes">' + goLabel + '</button>' +
-        '</div>' +
-      '</div>';
-
-    document.body.appendChild(bg);
-    function close(){ if (bg.parentNode) bg.parentNode.removeChild(bg); }
-    bg.querySelector('#wpNo').addEventListener('click', close);
-    bg.querySelector('#wpYes').addEventListener('click', function(){ close(); onGo(); });
-    bg.addEventListener('click', function(e){ if (e.target === bg) close(); });
-  }
-
-  /* ---------- 다운로드 가로채기 ---------- */
-  document.addEventListener('click', function(e){
-    var t = e.target;
-    var btn = (t && t.closest) ? t.closest('#' + BTN_ID) : null;
-    if (!btn) return;
-    if (btn.getAttribute('data-wp-ok') === '1'){ btn.removeAttribute('data-wp-ok'); return; }
-    if (btn.disabled) return;
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
-    confirmModal(function(){
-      btn.setAttribute('data-wp-ok','1');
-      btn.click();
-      setTimeout(function(){ loadBalance(); paintBar(); }, 1500);
-    });
-  }, true);
-
-  /* ---------- 시작 ---------- */
-  function boot(){
-    try { ensureBar(); paintBar(); paintBtn(); } catch(e){}
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
-  else boot();
-  setTimeout(boot, 800);
-  setTimeout(boot, 2000);
-  setTimeout(loadBalance, 1200);
-
-  /* 파일을 불러오면 무료 여부가 바뀌므로 주기적으로 문구를 갱신한다 */
-  var lastState = '';
-  setInterval(function(){
-    try {
-      var s = String(freeReason()) + '|' + cost() + '|' + balance;
-      if (s !== lastState){ lastState = s; paintBar(); }
-    } catch(e){}
-  }, 1200);
 })();
 </script>
 <!-- ===== 비밀번호 걸린 PDF 처리 ===== -->

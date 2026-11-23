@@ -243,7 +243,7 @@ const TESTING_BYPASS_POINTS = false;
 
 let myProfile = null;
   let freeUnlimited = false;
-  let historyCost = 1000; // 1회 매칭 실행당 차감 포인트. 관리자가 admin.html에서 수정 가능(로그인 시 최신값으로 갱신됨)
+  let historyCost = 1; // 1회 매칭 실행당 차감 크레딧. 관리자가 admin.html에서 수정 가능(로그인 시 최신값으로 갱신됨)
   (async ()=>{
       if(TESTING_BYPASS_POINTS){
         // 테스트 모드: 로그인/포인트 확인(assets/supabase-client.js 필요)을 아예 거치지
@@ -255,9 +255,10 @@ let myProfile = null;
       myProfile = await getMyProfile();
       freeUnlimited = !!myProfile && (myProfile.role === 'admin' || myProfile.role === 'gold');
       if(!freeUnlimited){
-        const costs = await getPointCosts(); // 관리자가 admin.html에서 수정한 최신 차감 포인트를 읽어온다
+        const costs = await getPointCosts(); // 관리자가 admin.html에서 수정한 최신 차감 크레딧을 읽어온다
         historyCost = costs.history;
       }
+      updateRunBtnLabel();
   })();
 document.getElementById("logoutLink").addEventListener("click", async (e)=>{
   e.preventDefault();
@@ -1205,6 +1206,12 @@ setupDrop("drop2","file2","fname2", f=>{ file2=f; updateRunBtn(); });
 setupDrop("drop3","file3","fname3", f=>{ file3=f; updateRunBtn(); });
 setupDrop("drop4","file4","fname4", f=>{ file4=f; updateRunBtn(); });
 function updateRunBtn(){ document.getElementById("runBtn").disabled = !((file1 && file2) || (file3 && file4)); }
+// 매칭 실행 버튼에 차감될 크레딧을 표시한다 (관리자/골드는 차감이 없으므로 그냥 "매칭 실행")
+function updateRunBtnLabel(){
+  const b = document.getElementById("runBtn");
+  if(!b || b.dataset.busy === "1") return;
+  b.textContent = freeUnlimited ? "매칭 실행" : ("매칭 실행 " + historyCost.toLocaleString() + "크레딧 차감");
+}
 document.getElementById("resetBtn").addEventListener("click", ()=>{
   file1=null; file2=null; file3=null; file4=null;
   ["1","2","3","4"].forEach(n=>{
@@ -1270,6 +1277,7 @@ document.getElementById("runBtn").addEventListener("click", async ()=>{
         status.className="status"; status.textContent="처리 중...";
         document.getElementById("results").classList.remove("show");
         runBtn.disabled = true;
+        runBtn.dataset.busy = "1";
         try{
                   if(!!file1 !== !!file2) throw new Error("1번(기본진료정보)과 2번(세부진료정보)은 함께 올려주세요.");
                   if(!!file3 !== !!file4) throw new Error("3번(자동차사고 기본)과 4번(자동차사고 세부)은 함께 올려주세요.");
@@ -1296,7 +1304,7 @@ document.getElementById("runBtn").addEventListener("click", async ()=>{
                               const ok = await spendPoints('history');
                               if(!ok){
                                             status.className="status err";
-                                            status.textContent="포인트 차감에 실패했습니다. 포인트가 부족하거나 승인 상태를 확인해주세요. (결과는 저장되지 않았습니다)";
+                                            status.textContent="크레딧 차감에 실패했습니다. 크레딧이 부족하거나 승인 상태를 확인해주세요. (결과는 저장되지 않았습니다)";
                                             return;
                               }
                   }
@@ -1309,12 +1317,14 @@ document.getElementById("runBtn").addEventListener("click", async ()=>{
                   document.getElementById("dentalUnknown").textContent = (dentalUnknown && dentalUnknown.length) ? "참고) 치과 진료일의 세부항목 중 레진·크라운·인레이·온레이·임플란트·치관확장술로 인식하지 못한 항목: " + dentalUnknown.join(" / ") : "";
                   document.getElementById("textD").textContent = textD || "(최근 2년 내 충치 · 5년 내 치주질환 진단 이력이 없습니다)";
                   document.getElementById("results").classList.add("show");
-                  status.className="status ok"; status.textContent = `완료 · 총 ${matrix.length-1}행 매칭됨` + (autoCount ? ` (자동차사고 ${autoCount}건 포함)` : "") + (freeUnlimited ? "" : ` (${historyCost.toLocaleString()}P 차감)`);
+                  status.className="status ok"; status.textContent = `완료 · 총 ${matrix.length-1}행 매칭됨` + (autoCount ? ` (자동차사고 ${autoCount}건 포함)` : "") + (freeUnlimited ? "" : ` (${historyCost.toLocaleString()}크레딧 차감)`);
         }catch(err){
                   console.error(err);
-                  status.className="status err"; status.textContent="오류: "+err.message+" (포인트는 차감되지 않았습니다)";
+                  status.className="status err"; status.textContent="오류: "+err.message+" (크레딧은 차감되지 않았습니다)";
         } finally {
                   runBtn.disabled = false;
+                  runBtn.dataset.busy = "0";
+                  updateRunBtnLabel();
         }
 });
 document.getElementById("dlBtn").addEventListener("click", async ()=>{
