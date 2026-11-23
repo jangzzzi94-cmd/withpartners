@@ -1341,5 +1341,144 @@ document.getElementById("footNote").textContent =
   "※ 기본진료정보 파일은 11개 열(순번~내가 낸 의료비) 구성을 기준으로 처리하며, 그 중 I·J열은 원본 매크로와 동일하게 자동 제외됩니다. " +
   "엑셀의 텍스트 정렬 방식과 브라우저 정렬 방식에 미세한 차이가 있을 수 있어 \"주상병명\" 정렬 결과가 원본과 완전히 동일하지 않을 수 있습니다.";
 </script>
+<!-- ===== 비밀번호 걸린 PDF 처리 ===== -->
+<style>
+  .wppw-bg{
+    position:fixed; inset:0; background:rgba(15,23,42,.45);
+    display:flex; align-items:center; justify-content:center; z-index:100000; padding:20px;
+    font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  }
+  .wppw{
+    background:#fff; border-radius:16px; max-width:400px; width:100%;
+    padding:26px 26px 20px; box-shadow:0 20px 50px rgba(15,23,42,.25);
+  }
+  .wppw h3{ margin:0 0 10px; font-size:17px; color:#171b23; }
+  .wppw p{ margin:0 0 16px; font-size:13.5px; line-height:1.75; color:#4e5968; }
+  .wppw input{
+    width:100%; box-sizing:border-box; padding:12px 14px; font-size:15px;
+    border:1px solid #d7dbe3; border-radius:9px; outline:none; font-family:inherit;
+  }
+  .wppw input:focus{ border-color:#2f6bff; box-shadow:0 0 0 3px rgba(47,107,255,.12); }
+  .wppw .wppw-err{
+    display:none; margin-top:10px; padding:9px 12px; border-radius:8px;
+    background:#fdecea; color:#d64545; font-size:13px; line-height:1.6;
+  }
+  .wppw .wppw-err.on{ display:block; }
+  .wppw .wppw-btns{ display:flex; gap:8px; margin-top:18px; }
+  .wppw button{
+    flex:1; padding:12px; border-radius:9px; font-size:14px; font-weight:700;
+    cursor:pointer; font-family:inherit; border:1px solid #d7dbe3; background:#fff; color:#4e5968;
+  }
+  .wppw button.wppw-go{ background:#0f2545; border-color:#0f2545; color:#fff; }
+  .wppw button:hover{ filter:brightness(.97); }
+</style>
+<script>
+(function(){
+
+  /* ---------- 비밀번호 입력창 ---------- */
+  function askPassword(isRetry){
+    return new Promise(function(resolve){
+      var bg = document.createElement('div');
+      bg.className = 'wppw-bg';
+
+      var box = document.createElement('div');
+      box.className = 'wppw';
+
+      var h = document.createElement('h3');
+      h.textContent = 'PDF 비밀번호 입력';
+
+      var p = document.createElement('p');
+      p.textContent = '올리신 PDF에 비밀번호가 걸려 있습니다. 비밀번호를 입력하시면 자동으로 풀고 작업을 이어갑니다.';
+
+      var inp = document.createElement('input');
+      inp.type = 'password';
+      inp.placeholder = '비밀번호';
+      inp.autocomplete = 'off';
+
+      var err = document.createElement('div');
+      err.className = 'wppw-err' + (isRetry ? ' on' : '');
+      if (isRetry) err.textContent = '비밀번호가 올바르지 않습니다. 다시 입력해 주세요.';
+
+      var btns = document.createElement('div');
+      btns.className = 'wppw-btns';
+      var no = document.createElement('button');
+      no.type = 'button'; no.textContent = '취소';
+      var go = document.createElement('button');
+      go.type = 'button'; go.className = 'wppw-go'; go.textContent = '확인';
+      btns.appendChild(no); btns.appendChild(go);
+
+      box.appendChild(h); box.appendChild(p); box.appendChild(inp);
+      box.appendChild(err); box.appendChild(btns);
+      bg.appendChild(box);
+      document.body.appendChild(bg);
+
+      var done = false;
+      function close(val){
+        if (done) return;
+        done = true;
+        if (bg.parentNode) bg.parentNode.removeChild(bg);
+        resolve(val);
+      }
+      function submit(){
+        var v = inp.value;
+        if (!v) { err.textContent = '비밀번호를 입력해 주세요.'; err.className = 'wppw-err on'; inp.focus(); return; }
+        close(v);
+      }
+
+      go.addEventListener('click', submit);
+      no.addEventListener('click', function(){ close(null); });
+      inp.addEventListener('keydown', function(e){
+        if (e.key === 'Enter') { e.preventDefault(); submit(); }
+        if (e.key === 'Escape') { e.preventDefault(); close(null); }
+      });
+      bg.addEventListener('click', function(e){ if (e.target === bg) close(null); });
+
+      setTimeout(function(){ try { inp.focus(); } catch(e){} }, 50);
+    });
+  }
+
+  /* ---------- pdfjsLib.getDocument 감싸기 ---------- */
+  function wrap(lib){
+    if (!lib || typeof lib.getDocument !== 'function' || lib.__wppwWrapped) return false;
+
+    var orig = lib.getDocument;
+    lib.getDocument = function(){
+      var task = orig.apply(lib, arguments);
+      try {
+        task.onPassword = function(updatePassword, reason){
+          var code = (reason && typeof reason === 'object') ? reason.code : reason;
+          var isRetry = (code === 2);
+          askPassword(isRetry).then(function(pw){
+            if (pw === null) {
+              try { task.destroy(); } catch(e){}
+              setTimeout(function(){
+                alert('비밀번호를 입력하지 않아 PDF를 열 수 없습니다.\n\n비밀번호를 확인하신 뒤 파일을 다시 올려주세요.');
+              }, 50);
+              return;
+            }
+            try { updatePassword(pw); } catch(e){}
+          });
+        };
+      } catch(e){}
+      return task;
+    };
+
+    lib.__wppwWrapped = true;
+    return true;
+  }
+
+  function boot(){
+    if (wrap(window.pdfjsLib)) return;
+    var n = 0;
+    var iv = setInterval(function(){
+      n++;
+      if (wrap(window.pdfjsLib) || n > 60) clearInterval(iv);
+    }, 250);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+</script>
 </body>
 </html>
