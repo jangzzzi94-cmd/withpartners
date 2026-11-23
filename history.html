@@ -1437,47 +1437,65 @@ document.getElementById("footNote").textContent =
     });
   }
 
-  /* ---------- pdfjsLib.getDocument 감싸기 ---------- */
-  function wrap(lib){
-    if (!lib || typeof lib.getDocument !== 'function' || lib.__wppwWrapped) return false;
-
-    var orig = lib.getDocument;
-    lib.getDocument = function(){
-      var task = orig.apply(lib, arguments);
-      try {
-        task.onPassword = function(updatePassword, reason){
-          var code = (reason && typeof reason === 'object') ? reason.code : reason;
-          var isRetry = (code === 2);
-          askPassword(isRetry).then(function(pw){
-            if (pw === null) {
-              try { task.destroy(); } catch(e){}
-              setTimeout(function(){
-                alert('비밀번호를 입력하지 않아 PDF를 열 수 없습니다.\n\n비밀번호를 확인하신 뒤 파일을 다시 올려주세요.');
-              }, 50);
-              return;
-            }
-            try { updatePassword(pw); } catch(e){}
-          });
-        };
-      } catch(e){}
-      return task;
+  function makeHandler(task){
+    return function(updatePassword, reason){
+      var code = (reason && typeof reason === 'object') ? reason.code : reason;
+      askPassword(code === 2).then(function(pw){
+        if (pw === null) {
+          try { task.destroy(); } catch(e){}
+          setTimeout(function(){
+            alert('비밀번호를 입력하지 않아 PDF를 열 수 없습니다.\n\n비밀번호를 확인하신 뒤 파일을 다시 올려주세요.');
+          }, 50);
+          return;
+        }
+        try { updatePassword(pw); } catch(e){}
+      });
     };
+  }
 
-    lib.__wppwWrapped = true;
-    return true;
+  /* ---------- pdfjsLib 가로채기 ----------
+     pdfjsLib.getDocument 는 덮어쓸 수 없는 getter 라서
+     pdfjsLib 객체 자체를 Proxy 로 감싼다. */
+  function install(){
+    var real = window.pdfjsLib;
+    if (!real || typeof real.getDocument !== 'function') return false;
+    try { if (real.__wppwProxy) return true; } catch(e){}
+    if (typeof Proxy !== 'function') return false;
+
+    var px;
+    try {
+      px = new Proxy(real, {
+        get: function(t, k, r){
+          if (k === '__wppwProxy') return true;
+          if (k === 'getDocument') {
+            return function(){
+              var task = t.getDocument.apply(t, arguments);
+              try { task.onPassword = makeHandler(task); } catch(e){}
+              return task;
+            };
+          }
+          return Reflect.get(t, k, r);
+        },
+        set: function(t, k, v){ return Reflect.set(t, k, v); }
+      });
+      window.pdfjsLib = px;
+    } catch(e){ return false; }
+
+    return window.pdfjsLib === px;
   }
 
   function boot(){
-    if (wrap(window.pdfjsLib)) return;
+    if (install()) return;
     var n = 0;
     var iv = setInterval(function(){
       n++;
-      if (wrap(window.pdfjsLib) || n > 60) clearInterval(iv);
+      if (install() || n > 80) clearInterval(iv);
     }, 250);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
+  boot();
 })();
 </script>
 </body>
