@@ -3316,12 +3316,15 @@ button.mdanger:disabled{ opacity:.5; cursor:default; }
     font-size:13.5px; line-height:1.7; color:#6b5520;
     font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
   }
+  .wp-credit-bar.free{ background:#eef8f0; border-color:#bfe3c8; color:#2f6b45; }
   .wp-credit-bar .wp-ico{ font-size:16px; }
   .wp-credit-bar b{ color:#8a6412; }
+  .wp-credit-bar.free b{ color:#1f7a44; }
   .wp-credit-bar .wp-bal{
     margin-left:auto; background:#fff; border:1px solid #ecd9b0;
     border-radius:999px; padding:3px 12px; font-size:12.5px; font-weight:700; color:#8a6412;
   }
+  .wp-credit-bar.free .wp-bal{ border-color:#bfe3c8; color:#1f7a44; }
   @media (max-width:640px){ .wp-credit-bar .wp-bal{ margin-left:0; } }
 
   .wp-modal-bg{
@@ -3336,10 +3339,12 @@ button.mdanger:disabled{ opacity:.5; cursor:default; }
   .wp-modal h3{ margin:0 0 10px; font-size:17px; color:#171b23; }
   .wp-modal p{ margin:0 0 6px; font-size:14px; line-height:1.75; color:#4e5968; }
   .wp-modal .wp-amt{ font-size:15px; font-weight:800; color:#d97706; }
+  .wp-modal .wp-free{ font-size:15px; font-weight:800; color:#1f7a44; }
   .wp-modal .wp-calc{
     margin:14px 0 4px; padding:12px 14px; background:#f7f9fc;
     border:1px solid #e6e9ef; border-radius:10px; font-size:13.5px; color:#424c5e;
   }
+  .wp-modal .wp-calc.free{ background:#f2faf4; border-color:#cfe9d8; color:#2f6b45; }
   .wp-modal .wp-btns{ display:flex; gap:8px; margin-top:18px; }
   .wp-modal button{
     flex:1; padding:12px; border-radius:9px; font-size:14px; font-weight:700;
@@ -3350,108 +3355,179 @@ button.mdanger:disabled{ opacity:.5; cursor:default; }
 </style>
 <script>
 (function(){
-  var COST = 3;
   var BTN_ID = 'dlBtn';
-  var LABEL  = '전체 다운로드 시 ' + COST + '크레딧이 차감됩니다';
   var balance = null;
 
   function $(id){ return document.getElementById(id); }
 
+  /* 차감 금액 */
+  function cost(){
+    try { if (typeof coverageCost === 'number' && coverageCost > 0) return coverageCost; } catch(e){}
+    return 3;
+  }
+
+  /*
+     차감되지 않는 경우
+     - 'unlimited' : 관리자·무제한 계정
+     - 'reuse'     : 이미 만든 보장분석표를 불러와 이어서 수정하는 중
+  */
+  function freeReason(){
+    try { if (typeof freeUnlimited !== 'undefined' && freeUnlimited) return 'unlimited'; } catch(e){}
+    try { if (typeof currentJobId !== 'undefined' && currentJobId) return 'reuse'; } catch(e){}
+    return null;
+  }
+
+  /* ---------- 보유 크레딧 읽기 (실패해도 무시) ---------- */
   async function loadBalance(){
     try{
-      if(typeof getMyProfile !== 'function') return;
+      if (typeof getMyProfile !== 'function') return;
       var p = await getMyProfile();
-      if(!p) return;
+      if (!p) return;
       var keys = ['points','credits','point','credit','balance','remaining_points'];
-      for(var i=0;i<keys.length;i++){
-        if(typeof p[keys[i]] === 'number'){ balance = p[keys[i]]; break; }
+      for (var i=0;i<keys.length;i++){
+        if (typeof p[keys[i]] === 'number'){ balance = p[keys[i]]; break; }
       }
       paintBar();
     }catch(e){}
   }
 
+  /* ---------- 상단 안내 바 ---------- */
   function ensureBar(){
     var bar = $('wpCreditBar');
-    if(bar) return bar;
+    if (bar) return bar;
     var h1 = document.querySelector('main h1') || document.querySelector('h1');
-    if(!h1) return null;
+    if (!h1) return null;
     bar = document.createElement('div');
     bar.id = 'wpCreditBar';
     bar.className = 'wp-credit-bar';
-    bar.innerHTML = '<span class="wp-ico">\uD83D\uDCB3</span>' +
-                    '<span>이 기능은 <b>' + LABEL + '</b>. 업로드와 편집은 무료이며, 결과물을 내려받을 때만 차감됩니다.</span>' +
-                    '<span class="wp-bal" id="wpCreditBal">보유 크레딧 확인 중…</span>';
+    bar.innerHTML = '<span class="wp-ico">💳</span>' +
+                    '<span id="wpCreditMsg"></span>' +
+                    '<span class="wp-bal" id="wpCreditBal"></span>';
     var after = h1;
     var nx = h1.nextElementSibling;
-    if(nx && nx.tagName === 'P') after = nx;
-    if(after.parentNode) after.parentNode.insertBefore(bar, after.nextSibling);
+    if (nx && nx.tagName === 'P') after = nx;
+    if (after.parentNode) after.parentNode.insertBefore(bar, after.nextSibling);
     return bar;
   }
 
   function paintBar(){
-    var el = $('wpCreditBal');
-    if(!el) return;
-    el.textContent = (balance === null)
-      ? '1회 ' + COST + '크레딧'
-      : '현재 보유 ' + balance.toLocaleString() + '크레딧';
+    var bar = ensureBar(); if (!bar) return;
+    var msg = $('wpCreditMsg'), bal = $('wpCreditBal');
+    var free = freeReason();
+    var n = cost();
+
+    if (free){
+      bar.className = 'wp-credit-bar free';
+      if (bar.querySelector('.wp-ico')) bar.querySelector('.wp-ico').textContent = '✅';
+      msg.innerHTML = (free === 'reuse')
+        ? '<b>기존에 사용했던 파일이라 크레딧이 차감되지 않습니다.</b> 수정 후 몇 번을 내려받아도 추가 차감이 없습니다.'
+        : '<b>크레딧이 차감되지 않는 계정입니다.</b> 자유롭게 내려받으실 수 있습니다.';
+    } else {
+      bar.className = 'wp-credit-bar';
+      if (bar.querySelector('.wp-ico')) bar.querySelector('.wp-ico').textContent = '💳';
+      msg.innerHTML = '이 기능은 <b>전체 다운로드 시 ' + n + '크레딧이 차감됩니다</b>. 업로드와 편집은 무료이며, 결과물을 내려받을 때만 차감됩니다.';
+    }
+
+    if (bal){
+      bal.textContent = (balance === null)
+        ? (free ? '차감 없음' : '1회 ' + n + '크레딧')
+        : '현재 보유 ' + balance.toLocaleString() + '크레딧';
+    }
   }
 
+  /* ---------- 버튼 라벨 ---------- */
   function paintBtn(){
     var b = $(BTN_ID);
-    if(!b) return;
+    if (!b) return;
     var t = (b.textContent || '');
-    if(t.indexOf('크레딧') >= 0) return;
-    b.textContent = t.replace(/\s*\d+\s*P\s*$/,'').trim() + ' · ' + COST + '크레딧 차감';
+    if (t.indexOf('크레딧') >= 0) return;
+    b.textContent = t.replace(/\s*\d+\s*P\s*$/,'').trim() + ' · ' + cost() + '크레딧 차감';
   }
 
+  /* ---------- 확인창 ---------- */
   function confirmModal(onGo){
+    var free = freeReason();
+    var n = cost();
+
     var bg = document.createElement('div');
     bg.className = 'wp-modal-bg';
-    var calc = (balance === null)
-      ? '<div class="wp-calc">차감 후 잔여 크레딧은 대시보드에서 확인하실 수 있습니다.</div>'
-      : '<div class="wp-calc">보유 <b>' + balance.toLocaleString() + '크레딧</b> → 차감 후 <b>' +
-        Math.max(0, balance - COST).toLocaleString() + '크레딧</b></div>';
+
+    var head, body, calc, goLabel;
+
+    if (free){
+      head    = '보장분석표 전체 다운로드';
+      body    = (free === 'reuse')
+        ? '<span class="wp-free">기존에 사용했던 파일이라 크레딧이 차감되지 않습니다.</span>'
+        : '<span class="wp-free">이 계정은 크레딧이 차감되지 않습니다.</span>';
+      calc    = '<div class="wp-calc free">' +
+                (balance === null
+                  ? '보유 크레딧은 그대로 유지됩니다.'
+                  : '보유 <b>' + balance.toLocaleString() + '크레딧</b> → 다운로드 후에도 <b>' + balance.toLocaleString() + '크레딧</b>') +
+                '</div>';
+      goLabel = '확인';
+    } else {
+      head    = '보장분석표 전체 다운로드';
+      body    = '이 파일을 내려받으면 <span class="wp-amt">' + n + '크레딧</span>이 차감됩니다.';
+      calc    = (balance === null)
+        ? '<div class="wp-calc">차감 후 잔여 크레딧은 대시보드에서 확인하실 수 있습니다.</div>'
+        : '<div class="wp-calc">보유 <b>' + balance.toLocaleString() + '크레딧</b> → 차감 후 <b>' +
+          Math.max(0, balance - n).toLocaleString() + '크레딧</b></div>';
+      goLabel = n + '크레딧 사용하고 다운로드';
+    }
+
     bg.innerHTML =
       '<div class="wp-modal" role="dialog" aria-modal="true">' +
-        '<h3>보장분석표 전체 다운로드</h3>' +
-        '<p>이 파일을 내려받으면 <span class="wp-amt">' + COST + '크레딧</span>이 차감됩니다.</p>' +
+        '<h3>' + head + '</h3>' +
+        '<p>' + body + '</p>' +
         calc +
         '<div class="wp-btns">' +
           '<button type="button" id="wpNo">취소</button>' +
-          '<button type="button" class="wp-go" id="wpYes">' + COST + '크레딧 사용하고 다운로드</button>' +
+          '<button type="button" class="wp-go" id="wpYes">' + goLabel + '</button>' +
         '</div>' +
       '</div>';
+
     document.body.appendChild(bg);
-    function close(){ if(bg.parentNode) bg.parentNode.removeChild(bg); }
+    function close(){ if (bg.parentNode) bg.parentNode.removeChild(bg); }
     bg.querySelector('#wpNo').addEventListener('click', close);
     bg.querySelector('#wpYes').addEventListener('click', function(){ close(); onGo(); });
-    bg.addEventListener('click', function(e){ if(e.target === bg) close(); });
+    bg.addEventListener('click', function(e){ if (e.target === bg) close(); });
   }
 
+  /* ---------- 다운로드 가로채기 ---------- */
   document.addEventListener('click', function(e){
     var t = e.target;
     var btn = (t && t.closest) ? t.closest('#' + BTN_ID) : null;
-    if(!btn) return;
-    if(btn.getAttribute('data-wp-ok') === '1'){ btn.removeAttribute('data-wp-ok'); return; }
-    if(btn.disabled) return;
+    if (!btn) return;
+    if (btn.getAttribute('data-wp-ok') === '1'){ btn.removeAttribute('data-wp-ok'); return; }
+    if (btn.disabled) return;
     e.preventDefault();
     e.stopPropagation();
-    if(e.stopImmediatePropagation) e.stopImmediatePropagation();
+    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
     confirmModal(function(){
       btn.setAttribute('data-wp-ok','1');
       btn.click();
-      loadBalance();
+      setTimeout(function(){ loadBalance(); paintBar(); }, 1500);
     });
   }, true);
 
+  /* ---------- 시작 ---------- */
   function boot(){
-    try{ ensureBar(); paintBar(); paintBtn(); }catch(e){}
+    try { ensureBar(); paintBar(); paintBtn(); } catch(e){}
   }
-  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
   setTimeout(boot, 800);
   setTimeout(boot, 2000);
   setTimeout(loadBalance, 1200);
+
+  /* 파일을 불러오면 무료 여부가 바뀌므로 주기적으로 문구를 갱신한다 */
+  var lastState = '';
+  setInterval(function(){
+    try {
+      var s = String(freeReason()) + '|' + cost() + '|' + balance;
+      if (s !== lastState){ lastState = s; paintBar(); }
+    } catch(e){}
+  }, 1200);
 })();
 </script>
 <!-- ===== 비밀번호 걸린 PDF 처리 ===== -->
