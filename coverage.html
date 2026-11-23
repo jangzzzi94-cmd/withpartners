@@ -3611,5 +3611,87 @@ button.mdanger:disabled{ opacity:.5; cursor:default; }
   boot();
 })();
 </script>
+<!-- ===== 상품이 많을 때 엑셀 서식 이어주기 ===== -->
+<script>
+(function(){
+  var START_COL    = 5;    // E열부터 상품이 들어감
+  var MAX_SCAN_COL = 200;
+  var MAX_SCAN_ROW = 150;
+
+  function hasBorder(cell){
+    var b = cell && cell.border;
+    if (!b) return false;
+    return !!(b.left || b.right || b.top || b.bottom);
+  }
+
+  /* 템플릿에 서식이 들어있는 마지막 상품 열 */
+  function lastStyledColumn(ws){
+    var last = 0;
+    for (var c = START_COL; c <= START_COL + MAX_SCAN_COL; c++){
+      var styled = false;
+      for (var r = 1; r <= MAX_SCAN_ROW; r++){
+        if (hasBorder(ws.getCell(r, c))) { styled = true; break; }
+      }
+      if (!styled) break;
+      last = c;
+    }
+    return last;
+  }
+
+  /* 그 열에서 서식이 들어있는 마지막 행 (표의 아래 끝) */
+  function lastStyledRow(ws, col){
+    var last = 0;
+    for (var r = 1; r <= MAX_SCAN_ROW; r++){
+      if (hasBorder(ws.getCell(r, col))) last = r;
+    }
+    return last;
+  }
+
+  /* 상품 수가 템플릿 열 수를 넘으면 마지막 열 서식을 그대로 이어붙인다 */
+  function padStyles(ws, nCols){
+    if (!ws || !nCols) return;
+
+    var src = lastStyledColumn(ws);
+    if (!src) return;
+
+    var need = START_COL + nCols - 1;
+    if (need <= src) return;
+
+    var lastRow = lastStyledRow(ws, src);
+    if (!lastRow) return;
+
+    var width = null;
+    try { width = ws.getColumn(src).width; } catch(e){}
+
+    for (var c = src + 1; c <= need; c++){
+      for (var r = 1; r <= lastRow; r++){
+        var s = ws.getCell(r, src);
+        var d = ws.getCell(r, c);
+        try { d.style = JSON.parse(JSON.stringify(s.style || {})); } catch(e){}
+      }
+      if (width) { try { ws.getColumn(c).width = width; } catch(e){} }
+    }
+  }
+
+  function boot(){
+    if (typeof window.fillSheetColumns !== 'function') return false;
+    if (window.fillSheetColumns.__wpPad) return true;
+
+    var orig = window.fillSheetColumns;
+    var wrapped = function(ws, columns){
+      try { padStyles(ws, (columns && columns.length) || 0); } catch(e){ console.warn('xlsx pad', e); }
+      return orig.apply(this, arguments);
+    };
+    wrapped.__wpPad = true;
+    window.fillSheetColumns = wrapped;
+    return true;
+  }
+
+  if (!boot()){
+    var n = 0;
+    var iv = setInterval(function(){ n++; if (boot() || n > 80) clearInterval(iv); }, 250);
+  }
+})();
+</script>
 </body>
 </html>
