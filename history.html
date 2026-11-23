@@ -110,6 +110,7 @@ button.secondary:hover{background:#e2eee2;}
   <h1>병력정리 자동 매칭</h1>
   <p class="sub">기본진료정보 + 세부진료정보 (+ 자동차사고 건) 업로드 → 매칭·정렬·하이라이트 → 병력정리 / 병력정리텍스트 자동 생성</p>
   <div class="privacy">업로드한 파일은 서버로 전송되지 않고 이 브라우저 안에서만 처리됩니다</div>
+  <div id="creditNotice" class="credit-notice" style="display:none;"></div>
   <button type="button" class="secondary" id="featureGuideBtn" style="margin-bottom:16px;">❓ 사용설명 보기</button>
   <div id="featureGuideModalOverlay" class="modal-overlay" style="display:none;">
     <div class="modal-card" style="max-width:480px;">
@@ -1209,8 +1210,20 @@ function updateRunBtn(){ document.getElementById("runBtn").disabled = !((file1 &
 // 매칭 실행 버튼에 차감될 크레딧을 표시한다 (관리자/골드는 차감이 없으므로 그냥 "매칭 실행")
 function updateRunBtnLabel(){
   const b = document.getElementById("runBtn");
-  if(!b || b.dataset.busy === "1") return;
-  b.textContent = freeUnlimited ? "매칭 실행" : ("매칭 실행 " + historyCost.toLocaleString() + "크레딧 차감");
+  if(b && b.dataset.busy !== "1"){
+    b.textContent = freeUnlimited ? "매칭 실행" : ("매칭 실행 " + historyCost.toLocaleString() + "크레딧 차감");
+  }
+  const box = document.getElementById("creditNotice");
+  if(box){
+    box.style.display = "flex";
+    if(freeUnlimited){
+      box.className = "credit-notice free";
+      box.innerHTML = '<span>✅</span><span><b>관리자·골드 회원은 크레딧이 차감되지 않습니다.</b></span>';
+    } else {
+      box.className = "credit-notice";
+      box.innerHTML = '<span>💳</span><span>이 기능은 <b>매칭 실행 시 ' + historyCost.toLocaleString() + '크레딧이 차감됩니다</b>. 파일 업로드와 결과 다운로드는 무료입니다.</span>';
+    }
+  }
 }
 document.getElementById("resetBtn").addEventListener("click", ()=>{
   file1=null; file2=null; file3=null; file4=null;
@@ -1276,6 +1289,10 @@ document.getElementById("runBtn").addEventListener("click", async ()=>{
         const runBtn = document.getElementById("runBtn");
         status.className="status"; status.textContent="처리 중...";
         document.getElementById("results").classList.remove("show");
+        if(!freeUnlimited && !confirm(historyCost.toLocaleString() + "크레딧이 차감됩니다. 계속하시겠습니까?")){
+          status.className="status"; status.textContent="";
+          return;
+        }
         runBtn.disabled = true;
         runBtn.dataset.busy = "1";
         try{
@@ -1325,6 +1342,7 @@ document.getElementById("runBtn").addEventListener("click", async ()=>{
                   runBtn.disabled = false;
                   runBtn.dataset.busy = "0";
                   updateRunBtnLabel();
+                  if(typeof refreshCreditBadge === "function") refreshCreditBadge();
         }
 });
 document.getElementById("dlBtn").addEventListener("click", async ()=>{
@@ -1506,6 +1524,106 @@ document.getElementById("footNote").textContent =
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
   boot();
+})();
+</script>
+<!-- ===== 보유 크레딧 배지 + 차감 안내 공통 ===== -->
+<style>
+/* ---- 상단 바 오른쪽 "보유 크레딧" 배지 ---- */
+.navbar nav a.credit-badge{
+  display:inline-block;margin-left:0;margin-right:4px;padding:5px 12px;
+  background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);
+  border-radius:999px;color:#fff;font-size:13px;font-weight:600;line-height:1.3;
+}
+.navbar nav a.credit-badge:hover{background:rgba(255,255,255,.2);color:#fff;}
+.navbar nav a.credit-badge b{color:#ffd591;font-weight:800;margin-left:2px;}
+
+/* ---- 크레딧 차감 안내 줄 ---- */
+.credit-notice{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  margin:0 0 18px;padding:12px 15px;border-radius:11px;
+  background:#fff8e8;border:1px solid #f0d9a8;color:#6b5520;
+  font-size:13.5px;line-height:1.7;
+}
+.credit-notice.free{background:#eef8f0;border-color:#bfe3c8;color:#2f6b45;}
+.credit-notice b{color:#8a6412;}
+.credit-notice.free b{color:#1f7a44;}
+
+/* ---- 차감 확인 안내창 ---- */
+.credit-modal-body p{margin:0 0 8px;font-size:14px;line-height:1.75;color:var(--ink);}
+.credit-modal-body .amt{font-weight:800;color:#d97706;}
+.credit-modal-body .nofee{font-weight:800;color:#1f7a44;}
+.credit-modal-calc{
+  margin:14px 0 2px;padding:11px 13px;border-radius:9px;
+  background:#f7f9fc;border:1px solid var(--line);font-size:13.5px;color:#424c5e;
+}
+.credit-modal-calc.free{background:#f2faf4;border-color:#cfe9d8;color:#2f6b45;}
+.credit-modal-btns{display:flex;gap:8px;margin-top:18px;}
+.credit-modal-btns button{
+  flex:1;padding:11px;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer;
+  border:1px solid var(--line);background:#fff;color:#4e5968;
+}
+.credit-modal-btns button.go{background:var(--navy-900);border-color:var(--navy-900);color:#fff;}
+.credit-modal-btns button:hover{filter:brightness(.97);}
+</style>
+<script>
+/* =============================================================================
+   공통 "보유 크레딧" 배지
+   - 모든 페이지 오른쪽 위(상단 바)에 지금 남은 크레딧을 보여준다.
+   - 관리자/골드 회원은 숫자 대신 "무제한"으로 표시한다.
+   - 크레딧을 쓰고 난 뒤에는 window.refreshCreditBadge() 를 부르면 다시 읽어온다.
+   - 상단 바(.navbar nav)만 있으면 어느 페이지에나 그대로 붙여 쓸 수 있다.
+   ========================================================================== */
+(function(){
+  var lastValue = null;   // 숫자 또는 "무제한"
+
+  function ensureBadge(){
+    var nav = document.querySelector(".navbar nav");
+    if(!nav) return null;
+    var el = document.getElementById("wpCreditBadge");
+    if(el) return el;
+    el = document.createElement("a");
+    el.id = "wpCreditBadge";
+    el.className = "credit-badge";
+    el.href = "charge.html";
+    el.title = "크레딧 충전하기";
+    el.innerHTML = '보유 크레딧 <b>...</b>';
+    nav.insertBefore(el, nav.firstChild);
+    return el;
+  }
+
+  function paint(){
+    var el = ensureBadge();
+    if(!el || lastValue === null) return;
+    el.innerHTML = '보유 크레딧 <b>' + lastValue + '</b>';
+  }
+
+  async function refresh(){
+    ensureBadge();
+    try{
+      if(typeof getMyProfile !== "function") return;
+      var p = await getMyProfile();
+      if(!p) return;
+      lastValue = (p.role === "admin" || p.role === "gold")
+        ? "무제한"
+        : Number(p.points || 0).toLocaleString();
+      paint();
+    }catch(e){
+      console.warn("보유 크레딧을 읽지 못했습니다:", e);
+    }
+  }
+
+  // 다른 페이지에서 차감 직후 숫자를 갱신할 때 쓴다
+  window.refreshCreditBadge = refresh;
+  // 차감 안내창에서 "차감 후 남는 크레딧"을 계산할 때 쓴다 (숫자가 아니면 null)
+  window.getCreditBalance = function(){
+    var n = (lastValue === null || lastValue === "무제한") ? null : Number(String(lastValue).replace(/,/g, ""));
+    return (n === null || isNaN(n)) ? null : n;
+  };
+
+  function boot(){ ensureBadge(); refresh(); }
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+  setTimeout(boot, 1500);
 })();
 </script>
 </body>
