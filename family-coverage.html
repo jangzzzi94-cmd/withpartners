@@ -308,6 +308,8 @@
       color-adjust:exact !important;
     }
     .navbar, .dropzone-wrap, .upload-wrap, .members, .actions-row, .btn, .pdf-hint, footer{display:none !important;}
+    /* 고객에게 전달되는 PDF에는 화면 전용 안내가 나오지 않게 한다 */
+    #featureGuideBtn, #featureGuideModalOverlay, .credit-notice, .hero p.sub{display:none !important;}
     body{background:#fff;}
     html, body{height:100%;}
     .hero{
