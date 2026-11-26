@@ -36,7 +36,20 @@ h1{font-size:26px; margin:0 0 6px; letter-spacing:-0.01em; font-weight:800;}
 .privacy::before{content:"●"; color:#4c9a63; font-size:8px;}
 table.result td.auto-hit{background:#ffe0b2 !important; font-weight:600;}
 .grid2{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:28px 0 20px;}
-@media (max-width:640px){ .grid2{grid-template-columns:1fr;} }
+@media (max-width:640px){
+  body{padding:0;}
+  .wrap{max-width:100%;padding:14px 12px 48px;}
+  h1{font-size:19px;}
+  .sub{display:none !important;}
+  .privacy{display:none !important;}
+  .drop .hint{display:none !important;}
+  #footNote{display:none !important;}
+  .grid2{grid-template-columns:1fr; gap:10px; margin:14px 0 12px;}
+  .card{padding:13px;border-radius:10px;}
+  .drop{padding:16px 10px;}
+  .run-row{gap:8px;}
+  .tablewrap{max-height:60vh;}
+}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;}
 .card h3{margin:0 0 4px; font-size:14.5px; display:flex; align-items:center; gap:8px;}
 .card h3 .n{width:20px;height:20px;border-radius:50%;background:var(--ink);color:#fff;font-size:11px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;}
@@ -137,13 +150,9 @@ button.secondary:hover{background:#e2eee2;}
       if(e.target === this) this.style.display = 'none';
     });
   </script>
-  <div class="pdf-card" style="margin-bottom:22px;">
-    <p class="desc" style="margin:0;">📑 <strong>기본진료정보 / 세부진료정보</strong> 칸에 엑셀(.xlsx/.xlsm) 또는 PDF를 그대로 올리세요. PDF는 자동으로 표를 인식해 변환한 뒤 바로 매칭에 사용합니다. 여러 페이지짜리 PDF도 한 파일로 이어 붙여 처리합니다.</p>
-  </div>
   <div class="grid2">
     <div class="card">
       <h3><span class="n">1</span> 기본진료정보 파일</h3>
-      <p class="desc">순번·진료시작일·병의원·진단과·입원외래·주상병코드 등이 담긴 원본 자료</p>
       <label class="drop" id="drop1">
         <input type="file" id="file1" accept=".xlsx,.xls,.xlsm,.pdf">
         <div class="icon">📄</div>
@@ -154,7 +163,6 @@ button.secondary:hover{background:#e2eee2;}
     </div>
     <div class="card">
       <h3><span class="n">2</span> 세부진료정보 파일</h3>
-      <p class="desc">날짜별 처방·수술 상세 내역이 담긴 원본 자료</p>
       <label class="drop" id="drop2">
         <input type="file" id="file2" accept=".xlsx,.xls,.xlsm,.pdf">
         <div class="icon">📄</div>
@@ -164,11 +172,9 @@ button.secondary:hover{background:#e2eee2;}
       <div class="filename" id="fname2"></div>
     </div>
   </div>
-  <p class="desc" style="margin:4px 0 -14px;">🚗 <strong>자동차사고 건이 있으면</strong> 아래 3·4번 칸에 올리세요. 1·2번 병력과 합쳐서 간편/표준체 고지사항에 함께 반영되며, 자동차사고 파일만 올려도 됩니다. (1·2번과 3·4번은 각각 기본+세부를 함께 올려야 합니다)</p>
   <div class="grid2">
     <div class="card">
       <h3><span class="n">3</span> 자동차사고 기본진료정보 <span style="font-weight:400;color:var(--muted,#888);font-size:12px;">(선택)</span></h3>
-      <p class="desc">자동차보험 관련 기본진료정보 (열이 10개인 서식, PDF/엑셀)</p>
       <label class="drop" id="drop3">
         <input type="file" id="file3" accept=".xlsx,.xls,.xlsm,.pdf">
         <div class="icon">🚗</div>
@@ -179,7 +185,6 @@ button.secondary:hover{background:#e2eee2;}
     </div>
     <div class="card">
       <h3><span class="n">4</span> 자동차사고 세부진료정보 <span style="font-weight:400;color:var(--muted,#888);font-size:12px;">(선택)</span></h3>
-      <p class="desc">자동차보험 관련 세부진료정보</p>
       <label class="drop" id="drop4">
         <input type="file" id="file4" accept=".xlsx,.xls,.xlsm,.pdf">
         <div class="icon">🚗</div>
@@ -259,7 +264,8 @@ let myProfile = null;
         const costs = await getPointCosts(); // 관리자가 admin.html에서 수정한 최신 차감 크레딧을 읽어온다
         historyCost = costs.history;
       }
-      updateRunBtnLabel();
+      if(typeof updateRunBtnLabel === 'function') updateRunBtnLabel();
+      else setTimeout(function(){ if(typeof updateRunBtnLabel === 'function') updateRunBtnLabel(); }, 0);
   })();
 document.getElementById("logoutLink").addEventListener("click", async (e)=>{
   e.preventDefault();
@@ -1586,7 +1592,7 @@ document.getElementById("footNote").textContent =
     el.className = "credit-badge";
     el.href = "charge.html";
     el.title = "크레딧 충전하기";
-    el.innerHTML = '보유 크레딧 <b>...</b>';
+    el.innerHTML = '<span class="cb-label">보유 크레딧</span><b>...</b>';
     nav.insertBefore(el, nav.firstChild);
     return el;
   }
@@ -1594,7 +1600,7 @@ document.getElementById("footNote").textContent =
   function paint(){
     var el = ensureBadge();
     if(!el || lastValue === null) return;
-    el.innerHTML = '보유 크레딧 <b>' + lastValue + '</b>';
+    el.innerHTML = '<span class="cb-label">보유 크레딧</span><b>' + lastValue + '</b>';
   }
 
   async function refresh(){

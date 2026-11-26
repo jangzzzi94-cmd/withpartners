@@ -76,7 +76,30 @@ textarea.pv-etc-input,textarea.master-item-input,textarea.af-item{min-height:80p
 .summary-premium-box.diff .val.up{color:#c0392b;}
 .summary-premium-box.diff .val.down{color:#1e7e50;}
 .summary-groups{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+.page-wrap{max-width:1200px;margin:0 auto;padding:28px 24px 60px;}
 @media (max-width:900px){.summary-groups{grid-template-columns:1fr;}}
+
+/* ====== 휴대폰 화면: 화면을 꽉 채우고, 부가 설명은 감춘다 ====== */
+@media (max-width:640px){
+  body{padding:0;}
+  .page-wrap{max-width:100%;padding:14px 12px 48px;}
+  h1{font-size:19px;}
+  h2{font-size:15px;}
+  .sub{display:none !important;}
+  #wpDndHint{display:none !important;}
+  .card{padding:13px;border-radius:10px;margin-bottom:12px;}
+  .row{gap:8px;}
+  input[type=file]{min-width:0;width:100%;flex:1 1 100%;}
+  button{padding:10px 13px;font-size:13px;}
+  .sheettabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;}
+  .sheettabs::-webkit-scrollbar{display:none;}
+  .sheettab{flex:0 0 auto;white-space:nowrap;padding:9px 13px;font-size:12.5px;}
+  .scrollwrap{max-height:62vh;}
+  table.preview{font-size:11px;}
+  table.preview th,table.preview td{padding:4px 5px;}
+  #resumeDropZone{padding:9px 10px;}
+  .status{font-size:12px;}
+}
 .summary-group{border:1px solid var(--line);border-radius:10px;overflow:hidden;}
 .summary-group h3{margin:0;padding:10px 12px;background:var(--ink);color:#fff;font-size:13.5px;text-align:center;}
 table.summary-table{width:100%;border-collapse:collapse;font-size:12.5px;}
@@ -100,7 +123,7 @@ table.summary-table thead td{font-weight:700;background:#f2f4f8;color:var(--ink-
 <a href="dashboard.html" class="brand">With <span>Partners</span></a>
 <nav><a href="profile.html">프로필</a><a href="dashboard.html">대시보드</a><a href="#" id="logoutLink">로그아웃</a></nav>
 </div>
-<div style="max-width:1200px;margin:0 auto;padding:28px 24px 60px;">
+<div class="page-wrap">
 
 <h1>보장분석표</h1>
 <div class="sub">원본 엑셀처럼 아래 탭에서 시트를 골라 볼 수 있습니다: 보장분석표(전) / 보장분석표(후) / 종합비교 / 보장차이 / 마스터.</div>
@@ -167,21 +190,23 @@ table.summary-table thead td{font-weight:700;background:#f2f4f8;color:var(--ink-
     <div class="row" style="margin-top:12px;gap:10px;">
       <label for="customerNameInput" style="font-size:13px;font-weight:600;white-space:nowrap;">고객명</label>
       <input type="text" id="customerNameInput" placeholder="예: 홍길동" style="flex:1;min-width:180px;">
-      <button type="button" class="secondary" id="manualAddBtn">✏️ 상품 직접 추가 (파일 없이)</button>
     </div>
-    <div class="sub" style="margin:8px 0 0;font-size:12px;">고객명은 엑셀 표지·저장 파일명·종합비교 제목에 쓰입니다. 파일을 불러오면 자동으로 채워지고, 여기서 직접 고칠 수 있습니다. 가입된 보험이 없어 불러올 파일이 없으면 "상품 직접 추가"를 눌러 빈 양식에 바로 적으세요.</div>
+    <div class="sub" style="margin:8px 0 0;font-size:12px;">고객명은 엑셀 표지·저장 파일명·종합비교 제목에 쓰입니다. 파일을 불러오면 자동으로 채워지고, 여기서 직접 고칠 수 있습니다. 가입된 보험이 없어 불러올 파일이 없으면 표에 바로 적으시면 됩니다. 칸이 모자라면 "상품 열 추가"를 누르세요.</div>
     <div class="status" id="status">파일을 선택하세요. (PDF 또는 .xlsx/.xlsm)</div>
     <div id="resumeDropZone" class="row" style="margin-top:10px;border:1px dashed var(--line);border-radius:8px;padding:10px 12px;background:#fafbfd;">
       <input type="file" id="resumeFileInput" accept=".xlsx" style="display:none;">
       <button type="button" id="resumeUploadBtn" class="secondary">📂 이전 보장분석표 불러오기 (이어서 수정)</button>
-      <div class="status" id="resumeStatus" style="margin:0;">파일을 여기로 끌어다 놓거나 버튼을 눌러 골라주세요. With Partners에서 내려받았던 .xlsx를 텍스트만 고쳐서 다시 올리면, "유지" 표시했던 상품까지 그대로 화면에서 이어서 수정할 수 있습니다.</div>
+      <div class="status" id="resumeStatus" style="margin:0;">예전에 내려받은 .xlsx를 올리면 이어서 수정할 수 있습니다.</div>
     </div>
   </div>
 
   <div class="card" id="previewCard" style="display:none;">
     <div class="row" style="justify-content:space-between;">
       <div><strong>보장분석표(전) 미리보기</strong> <span class="badge" id="countBadge"></span></div>
-      <button type="button" class="secondary undo-delete-btn" id="undoDeleteBtnBefore" disabled>되돌리기 (Ctrl+Z)</button>
+      <div class="row" style="gap:8px;">
+        <button type="button" class="secondary undo-delete-btn" id="undoDeleteBtnBefore" disabled>되돌리기 (Ctrl+Z)</button>
+        <button type="button" class="secondary" id="manualAddBtn">➕ 상품 열 추가</button>
+      </div>
     </div>
     <div class="scrollwrap"><table class="preview" id="previewTable"></table></div>
   </div>
@@ -389,7 +414,7 @@ function deleteAfterColumn(i){
     const src = lastResult.columns.find(c=>c.id === col.sourceId);
     if(src){ src.kept = false; applyKeptUI(); }
   }
-  if(!afterColumns.length) afterColumns = [blankAfterColumn(), blankAfterColumn()];
+  if(!afterColumns.length) afterColumns = defaultAfterColumns();
   renderAfterSheet();
 }
 
@@ -1332,7 +1357,7 @@ async function loadResumeFile(file){
     for(let i=pairCount;i<carryoverAfterCols.length;i++) carryoverAfterCols[i].source = "manual";
 
     afterColumns = rawAfterColumns;
-    if(!afterColumns.length) afterColumns = [blankAfterColumn(), blankAfterColumn()];
+    if(!afterColumns.length) afterColumns = defaultAfterColumns();
 
     renderPreview(lastResult);
     syncAfterCarryoverFromBefore(); // 위에서 짝지어둔 sourceId를 그대로 이어받아 렌더링(내부에서 renderAfterSheet 호출)
@@ -2699,7 +2724,14 @@ function blankAfterColumn(){
   return { source:"manual", sourceId:null, alias:"", lastMatchedPlanId:null,
            productName:"", insurer:"", duration:"", term:"", premium:"", holder:"", items:{} };
 }
-let afterColumns = [blankAfterColumn(), blankAfterColumn()];
+// 비어 있을 때 기본으로 만들어 두는 상품칸 개수
+const AFTER_DEFAULT_COLS = 5;
+function defaultAfterColumns(){
+  const arr = [];
+  for(let i=0;i<AFTER_DEFAULT_COLS;i++) arr.push(blankAfterColumn());
+  return arr;
+}
+let afterColumns = defaultAfterColumns();
 
 // 보장분석표(전)에서 "유지"를 체크한 상품만 순서대로 (후) 시트 앞쪽에 자동
 // 연동한다 (유지를 누르지 않으면 후로 넘어가지 않는다). 이미 연동돼 있던 열은
@@ -2725,7 +2757,7 @@ function syncAfterCarryoverFromBefore(){
   });
   const manualColumns = afterColumns.filter(c=>c.source!=="carryover");
   afterColumns = [...newCarryover, ...manualColumns];
-  if(!afterColumns.length) afterColumns = [blankAfterColumn(), blankAfterColumn()];
+  if(!afterColumns.length) afterColumns = defaultAfterColumns();
   renderAfterSheet();
 }
 
@@ -3330,7 +3362,6 @@ button.mdanger:disabled{ opacity:.5; cursor:default; }
 </script>
 <!-- ===== (전) 기본 표 + 드래그앤드롭 ===== -->
 <style>
-#manualAddBtn{ display:none !important; }
 #sheet-before.wp-drop{ outline:3px dashed #2f6bff; outline-offset:-6px; background:#f3f8ff; }
 .wp-dndhint{ display:inline-block; margin-left:8px; font-size:12px; color:#2f6bff; font-weight:600; }
 </style>
@@ -3346,7 +3377,7 @@ button.mdanger:disabled{ opacity:.5; cursor:default; }
     try{ has=(typeof lastResult!=='undefined') && lastResult && (lastResult.columns||[]).length>0; }catch(e){}
     if(has) return true;
     var b=$('manualAddBtn'); if(!b) return false;
-    b.click();
+    for(var i=0;i<5;i++) b.click();   // 파일이 없어도 기본 상품칸 5개를 만들어 둔다
     try{
       var st=$('status');
       if(st){ st.className='status'; st.textContent='파일을 선택하거나 이 화면으로 끌어다 놓으세요. (PDF 또는 .xlsx/.xlsm)'; }
@@ -3773,7 +3804,7 @@ button.mdanger:disabled{ opacity:.5; cursor:default; }
     el.className = "credit-badge";
     el.href = "charge.html";
     el.title = "크레딧 충전하기";
-    el.innerHTML = '보유 크레딧 <b>...</b>';
+    el.innerHTML = '<span class="cb-label">보유 크레딧</span><b>...</b>';
     nav.insertBefore(el, nav.firstChild);
     return el;
   }
@@ -3781,7 +3812,7 @@ button.mdanger:disabled{ opacity:.5; cursor:default; }
   function paint(){
     var el = ensureBadge();
     if(!el || lastValue === null) return;
-    el.innerHTML = '보유 크레딧 <b>' + lastValue + '</b>';
+    el.innerHTML = '<span class="cb-label">보유 크레딧</span><b>' + lastValue + '</b>';
   }
 
   async function refresh(){

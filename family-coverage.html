@@ -268,6 +268,30 @@
     .hero p.sub{white-space:normal;}
   }
 
+  /* ====== 휴대폰 화면: 화면을 꽉 채우고, 부가 설명은 감춘다 ====== */
+  @media (max-width:640px){
+    .wrap{max-width:100%;padding:16px 12px 48px;}
+    .hero{padding:16px 14px 24px;}
+    .hero-inner{padding:0;}
+    .hero-mark{position:static;display:block;height:24px;margin:0 0 12px;}
+    .eyebrow{font-size:10.5px;margin-bottom:8px;}
+    .hero h1{font-size:21px;}
+    .hero p.sub{display:none;}
+    .empty-hero{padding:14px 0 0;font-size:13px;}
+    .hero-stats{grid-template-columns:1fr;}
+    .upload-wrap{padding:0 12px;}
+    .section-title{margin:24px 0 10px;}
+    .section-title h2{font-size:16px;}
+    .section-title .desc{display:none;}
+    .pdf-hint{display:none;}
+    .card{padding:14px;}
+    .insight-row{grid-template-columns:1fr;gap:8px;}
+    .contrib-legend{gap:8px;}
+    .table-scroll{-webkit-overflow-scrolling:touch;}
+    .detail-table{font-size:11.5px;}
+    .actions-row .btn{width:100%;}
+  }
+
   /* ---------- PRINT-ONLY ELEMENTS ---------- */
   .print-only{display:none;}
   .print-page{}
@@ -971,7 +995,7 @@ renderHero();
     el.className = "credit-badge";
     el.href = "charge.html";
     el.title = "크레딧 충전하기";
-    el.innerHTML = '보유 크레딧 <b>...</b>';
+    el.innerHTML = '<span class="cb-label">보유 크레딧</span><b>...</b>';
     nav.insertBefore(el, nav.firstChild);
     return el;
   }
@@ -979,7 +1003,7 @@ renderHero();
   function paint(){
     var el = ensureBadge();
     if(!el || lastValue === null) return;
-    el.innerHTML = '보유 크레딧 <b>' + lastValue + '</b>';
+    el.innerHTML = '<span class="cb-label">보유 크레딧</span><b>' + lastValue + '</b>';
   }
 
   async function refresh(){
